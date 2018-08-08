@@ -503,12 +503,39 @@ def heisenberg_mpo(N, h, J):
     z = np.array([[0.0, 0.0], [0.0, 0.0]])
     
     W = []
-    W.append(np.einsum('abnN -> anNb', np.array([[-h * Sz, 0.5 * J * Sm, 0.5 * J * Sp, J * Sz, I]])))
+    W.append(einsum('abnN -> anNb', np.array([[-h * Sz, 0.5 * J * Sm, 0.5 * J * Sp, J * Sz, I]])))
     for i in xrange(N-2):
-        W.append(np.einsum('abnN -> anNb', np.array([[I, z, z, z, z],
+        W.append(einsum('abnN -> anNb', np.array([[I, z, z, z, z],
                                                     [Sp, z, z, z, z],
                                                     [Sm, z, z, z, z],
                                                     [Sz, z, z, z, z],
                                                     [-h * Sz, 0.5 * J * Sm, 0.5 * J * Sp, J * Sz, I]])))
-    W.append(np.einsum('abnN -> anNb', np.array([[I], [Sp], [Sm], [Sz], [-h * Sz]])))
+    W.append(einsum('abnN -> anNb', np.array([[I], [Sp], [Sm], [Sz], [-h * Sz]])))
     return W
+
+def initialize_heisenberg(N, h, J, M):
+    """
+    Initialize the MPS, MPO and ropr.
+    """
+    
+    # MPS
+    mpss = []
+    for i in range(int(N / 2)):
+        mpss.append(np.ones((min(2 ** (i), M), 2, min(2 ** (i+1), M))))
+    for i in range(int(N / 2))[::-1]:
+        mpss.append(np.ones((min(2 ** (i + 1), M), 2, min(2 ** i, M))))
+    mpss = np.asarray(mpss)
+    
+    # MPO
+    mpos = np.asarray(heisenberg_mpo(N, h, J))
+
+    # ropr
+    ropr = einsum('LNR, anNb, lnr -> laL', mpss[-1].conj(), mpos[-1], mpss[-1]) 
+    for i in xrange(N - 2, 0, -1):
+        ropr = renormalize(0, mpos[i], ropr, mpss[i].conj(), mpss[i])
+    
+    return mpss, mpos, ropr
+    
+    
+
+
