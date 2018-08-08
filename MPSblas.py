@@ -51,9 +51,7 @@ def product_state(dps,occ):
     return mps
 
 def scal(mps,alpha):
-    # mps:   mps object to be scaled
-    # alpha: scaling factor
-    # returns mps scaled by alpha
+    # result:  mps scaled by alpha
 
     L = len(mps)
     const = float(abs(alpha))**(1./L)
@@ -63,6 +61,47 @@ def scal(mps,alpha):
     # change sign as specified by alpha
     mps[0] *= np.sign(alpha)
 
-    return mps
+
+
+def conj(mps):
+    # result: takes complex conjugate of mps
+    for i in range(len(mps)):
+        mps[i] = np.conj(mps[i])
+
+
+def axpy(alpha,mps1,mps2):
+    # alpha = scalar, mps1,mps2 are ndarrays of tensors   
+    # returns alpha*mps1 + mps2
+
+    mps_new = np.empty(len(mps1),dtype=np.object)
+
+    scal(mps1,alpha)
+    assert(len(mps1)==len(mps2)), 'need to have same lengths: (%d,%d)'%(len(mps1),len(mps2))
+    for i in range(len(mps1)):
+        l1,n1,r1 = mps1[i].shape
+        l2,n2,r2 = mps2[i].shape
+        assert(n1==n2)
+        newSite = np.zeros((l1+l2,n1,r1+r2))
+        combine = (l1==l2,r1==r2)
+
+        iL1,iR1 = l1,r1
+        iL2,iR2 = l1,r1
+ 
+        if combine[0]:           iL2 = 0
+        if combine[1]:           iR2 = 0
+
+        newSite[:iL1,:,:iR1] = mps1[i]
+        newSite[iL2:,:,iR2:] = mps2[i]
+
+        mps_new[i] = newSite.copy()
+    
+    return mps_new
+    
+
+def compress(mps,D):
+    pass
+    
+def inprod(mps1,mpo,mps2):
+    pass
 
 
