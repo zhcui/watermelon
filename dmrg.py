@@ -165,25 +165,11 @@ def compute_sigmavector(mpo0, lopr, ropr, wfn0):
     sgv0 = einsum('rbNL, rbR -> LNR', scr2, ropr)
     return sgv0
 	
-
-
-
-def mps_dot(bra, ket):
-    """
-    Dot function for two mps.
-
-    """
-    return einsum('lnr, lnr', bra.conj(), ket)
-
-
-def svd(arrow, a, DMAX=0): # NOTE move to quantum number tensor class 
+def svd(idx, a, DMAX=0):
     """
     Thin Singular Value Decomposition
-    
-    Parameters
-    ----------
-    arrow : enum obj
-        Arrow.LeftArrow for left, Arrow.RightArrow for right.
+
+    idx : subscripts to split 
     a : ndarray
         matrix to do svd.
     DMAX: int
@@ -197,16 +183,16 @@ def svd(arrow, a, DMAX=0): # NOTE move to quantum number tensor class
         sigular value
     vt : ndarray
         right matrix
-
     """
+    idx0 = re.split(",", idx)
+    assert len(idx0) == 2
+    idx0[0].replace(" ", "")
 
-    if arrow == Arrow.LeftArrow: #ZHC NOTE the arrow is a number? then should be .value
-        a = reshape(a, [a.shape[0] * a.shape[1], -1])
-        u, s, vt = scipy.linalg.svd(a, full_matrices = False)
-    elif arrow == Arrow.RightArrow:
-        a = reshape(a, [a.shape[0], -1])
-        u, s, vt = scipy.linalg.svd(a, full_matrices = False)
+    nsplit = len(idx0) 
 
+    a = reshape(a, [np.prod(a.shape[:nsplit], -1]])
+    u, s, vt = scipy.linalg.svd(a, full_matrices = False)
+    
     M = len(s)
     if DMAX > 0:
         M = min(DMAX, M)
@@ -215,12 +201,11 @@ def svd(arrow, a, DMAX=0): # NOTE move to quantum number tensor class
     s = s[:M]
     vt = vt[:M,:]
 
-    if arrow == Arrow.LeftArrow:
-        u = reshape(u, [a.shape[0], a.shape[1], -1])
-    elif arrow == Arrow.RightArrow:
-        vt = reshape(vt, [M, a.shape[1], -1])
+    u = reshape(u, [a.shape[:nsplit] + [-1]])
+    vt = reshape(vt, [a.shape[nsplit:]+[-1]])
 
     return u, s, vt
+    
 
 def canonicalize(forward, wfn0, M = 0):
     """
@@ -245,10 +230,10 @@ def canonicalize(forward, wfn0, M = 0):
     """
 
     if forward:
-        mps0, s, wfn1 = svd(Arrow.LeftArrow, wfn0, M)
+        mps0, s, wfn1 = svd("ij,k", wfn0, M)
         gaug = einsum("ij, jk -> ik", diag(s), wfn1)
     else:
-        wfn1, s, mps0 = svd(Arrow.RightArrow, wfn0, M)
+        wfn1, s, mps0 = svd("i,jk", wfn0, M)
         gaug = einsum("ij, jk -> ik", wfn1, diag(s))
     return mps0, gaug
         
@@ -316,41 +301,36 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M = 0):
         The energy of desired root(s).
 
     """
-    def davidson(x0, diag_flat):
-        """
-        Davidson algorithm.
+    # def davidson(x0, diag_flat):
+    #     """
+    #     Davidson algorithm.
 
-        Parameters
-        ----------
-        x0 : ndarray
-            initial state.
-        diag_flat : ndarray
-            precomputed diagonal elements, 1D array.
+    #     Parameters
+    #     ----------
+    #     x0 : ndarray
+    #         initial state.
+    #     diag_flat : ndarray
+    #         precomputed diagonal elements, 1D array.
          
-        Returns
-        -------
-        energy : float or list of floats
-            The energy of desired root(s).
-        coeff : ndarray or list of ndarray
-            The wavefunction.
+    #     Returns
+    #     -------
+    #     energy : float or list of floats
+    #         The energy of desired root(s).
+    #     coeff : ndarray or list of ndarray
+    #         The wavefunction.
 
-        """
-        mps_shape = x0.shape
-        def compute_sigma_flat(x):
-            return compute_sigmavector(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
-        def compute_precond_flat(dx, e, x0):
-            return dx / (diag_flat - e)
+    #     """
 
-        e, c = lib.linalg_helper.davidson(compute_sigma_flat, x0.ravel(), compute_precond_flat)
-        
-        return e, c.reshape(mps_shape)
-
-
-    #diag = compute_diagonal_elements(mpo0, lopr, ropr)
     diag_flat = compute_diagonal_elements(mpo0, lopr, ropr).ravel()
     
-    energy, wfn0 = davidson(wfn0, diag_flat)
-
+    mps_shape = wfn0.shape
+    def compute_sigma_flat(x):
+        return compute_sigmavector(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
+    def compute_precond_flat(dx, e, x0):
+        return dx / (diag_flat - e)
+    energy, wfn0 = lib.linalg_helper.davidson(compute_sigma_flat, wfn0.ravel(), compute_precond_flat)
+    wfn0 = wfn.reshape(mps_shape)
+    
     if forward:
         wfn0, gaug = canonicalize(1, wfn0, M) # wfn0 R => lmps gaug
         wfn1 = einsum("ij,jkl->ikl", gaug, wfn1)
@@ -383,77 +363,30 @@ def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M=0)
 
     """
     wfn2 = einsum("lnr, rms -> lnms", lwfn, rwfn)
-    
     diag = compute_diagonal_elements(lmpo, rmpo, lopr, ropr)
+
+    mps_shape = wfn2.shape
     
-    energy, coeff = davidson(compute_sigmavector, diag, wfn0)
-    
+    def compute_sigma_flat(x):
+        return compute_sigmavector(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
+    def compute_precond_flat(dx, e, x0):
+        return dx / (diag_flat - e)
+
+    energy, wfn0 = lib.linalg_helper.davidson(compute_sigma_flat, wfn2.ravel(), compute_precond_flat)
+    wfn0 = wfn0.reshape(mps_shape)
+
+    if forward:
+        wfn0, gaug = canonicalize(1, wfn0, M) # wfn0 R => lmps gaug
+        wfn1 = einsum("ij,jkl->ikl", gaug, wfn1)
+        lopr = renormalize(1, mpo0, lopr, wfn0, wfn0)
+    else:
+        wfn0, gaug = canonicalize(0, wfn0, M) # wfn0 R => lmps gaug
+        wfn1 = einsum("ijk,kl->ijl", wfn1, gaug)
+        ropr = renormalize(0, mpo0, ropr, wfn0, wfn0)
+
+    return energy, wfn0, wfn1, lopr, ropr
 
 
-template<class Q>
-double optimize_twosite
-(bool forward, const btas::QSDArray<4, Q>& lmpo,
-               const btas::QSDArray<4, Q>& rmpo,
-                     btas::QSDArray<3, Q>& lopr,
-                     btas::QSDArray<3, Q>& ropr,
-                     btas::QSDArray<3, Q>& lwfn,
-                     btas::QSDArray<3, Q>& rwfn,
-               const double& T, const int& M = 0)
-{
-  using std::cout;
-  using std::endl;
-  using std::flush;
-  using std::setw;
-  using std::setprecision;
-  using std::fixed;
-  using std::scientific;
-
-  time_stamp ts;
-
-  cout << "\t\tcomputing 2-site wavefunction..." << flush;
-  btas::QSDArray<4, Q> wfn2;
-  btas::QSDgemm(btas::NoTrans, btas::NoTrans, 1.0, lwfn, rwfn, 1.0, wfn2);
-  cout << "done ( " << fixed << setprecision(2) << setw(8) << ts.lap() << " sec. ) " << endl;
-
-  cout << "\t\tcomputing diagonal elements..." << flush;
-  btas::QSDArray<4, Q> diag(wfn2.q(), wfn2.qshape());
-  compute_diagonal_elements(lmpo, rmpo, lopr, ropr, diag);
-  cout << "done ( " << fixed << setprecision(2) << setw(8) << ts.lap() << " sec. ) " << endl;
-
-  cout << "\t\toptimizing wavefunction (Davidson solver)..." << endl;
-  davidson::Functor<4, Q> f_sigmavector;
-  f_sigmavector = boost::bind(compute_sigmavector<Q>, lmpo, rmpo, lopr, ropr, _1, _2);
-  cout << "\t\tdone ( " << fixed << setprecision(2) << setw(8) << ts.lap() << " sec. ) " << endl;
-
-  double energy = davidson::diagonalize(f_sigmavector, diag, wfn2);
-
-  if(forward) {
-    cout << "\t\tdoing singular value decomposition on wavefunction..." << flush;
-    canonicalize(1, wfn2, lwfn, rwfn, M);
-    cout << "done ( " << fixed << setprecision(2) << setw(8) << ts.lap() << " sec. ) " << endl;
-
-    cout << "\t\trenormalizing operators to the next..." << flush;
-    btas::QSDArray<3, Q> lopr_tmp;
-    renormalize(1, lmpo, lopr, lwfn, lwfn, lopr_tmp);
-    lopr = lopr_tmp;
-    cout << "done ( " << fixed << setprecision(2) << setw(8) << ts.lap() << " sec. ) " << endl;
-  }
-  else {
-    cout << "\t\tdoing singular value decomposition on wavefunction..." << flush;
-    canonicalize(0, wfn2, rwfn, lwfn, M);
-    cout << "done ( " << fixed << setprecision(2) << setw(8) << ts.lap() << " sec. ) " << endl;
-
-    cout << "\t\trenormalizing operators to the next..." << flush;
-    btas::QSDArray<3, Q> ropr_tmp;
-    renormalize(0, rmpo, ropr, rwfn, rwfn, ropr_tmp);
-    ropr = ropr_tmp;
-    cout << "done ( " << fixed << setprecision(2) << setw(8) << ts.lap() << " sec. ) " << endl;
-  }
-  cout << "\t\t--------------------------------------------------------------------------------" << endl;
-  cout << "\t\tTotal time for optimization: " << fixed << setprecision(2) << setw(8) << ts.elapsed() << " sec. " << endl;
-
-  return energy;
-}
 
 //
 // Merged block version
