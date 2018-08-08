@@ -1,13 +1,91 @@
 #! /usr/bin/env python 
+
+"""
+Simple implementation of DMRG.
+Written by:
+    Zhihao Cui
+    Garnet Chan
+"""
+
+"""
+Current convention for MPS and MPO indexing.
+
+    MPS:
+          n     L _ _ R
+        l_|_r ,    |
+                   N
+        stored as left-mid-right, e.g. 'lnr', 'LNR'.
+
+    MPO:  
+          N
+        a_|_b
+          |
+          n
+        stored as 'anNb'.
+    
+    Opr:
+         _L 
+        |_a 
+        |_l
+        stored as 'laL'.
+        convention:
+            from down to up.
+
+    Intermediate result:
+         _L 
+        |_a n
+        |___|___l
+        
+        stored as 'lnaL'.
+        convention:
+            first from down to up,
+            then left to right.
+
+"""
+
 import numpy as np
 from pyscf import lib
 from enum import Enum
 
 class Arrow(Enum):
+    """
+    Arrow class to indicate the direction of sweep.
+    
+    0 for left and 1 for right.
+
+    """
+
     LeftArrow = 0
     RightArrow = 1
 
 def compute_diagonal_elements(mpo0, lopr, ropr):
+    """
+    Compute the diagonal elements of sandwich <L|MPO|R>,
+    used as preconditioner of Davidson algorithm.
+
+    Math
+    ----------
+
+     _l n r_
+    |___|___|
+    |_l | r_|
+        n
+
+    Parameters
+    ----------
+    mpo0 : ndarray
+        The MPO.
+    lopr : ndarray
+        left block operators
+    ropr : ndarray
+        right block operators
+     
+    Returns
+    -------
+    diag : ndarray
+        The diagonal element, stored as 'lnr'.
+
+    """
 
     mpo0_diag = einsum('annb -> anb', mpo0)
     lopr_diag = einsum('lal -> la', lopr)
@@ -21,27 +99,98 @@ def compute_diagonal_elements(mpo0, lopr, ropr):
     return diag
 
 def compute_sigmavector(mpo0, lopr, ropr, wfn0):
+    """
+    Compute the sigma vetor, i.e. sigma = H * c
+    used for Davidson algorithm.
+
+    Math
+    ----------
+
+     _L N R_
+    |___|___|
+    |___|___|
+
+
+    Parameters
+    ----------
+    mpo0 : ndarray
+        The MPO.
+    lopr : ndarray
+        left block operators
+    ropr : ndarray
+        right block operators
+    wfn0 : ndarray
+        The current MPS. (wavefunction for desired roots)
+     
+    Returns
+    -------
+    sgv0 : ndarray
+        The sigma vector, stored as LNR.
+
+    """
+    # ZHC NOTE the contraction order and stored structure may be optimized.
+
     scr1 = einsum('laL, lnr -> rnaL', lopr, wfn0)
     scr2 = einsum('rnaL, anNb -> rbNL', scr1, mpo0)
     sgv0 = einsum('rbNL, rbR -> LNR', scr2, ropr)
     return sgv0
 	
 def davidson(aop0, x0, precond):
+    """
+    Davidson algorithm.
+
+    Parameters
+    ----------
+    aop0 : callable
+        function to compute sigma.
+    x0 : ndarray
+        initial state.
+    precond : ndarray
+        preconditioner. 
+     
+    Returns
+    -------
+    energy : float or list of floats
+        The energy of desired root(s).
+    coeff : ndarray or list of ndarray
+        The wavefunction.
+
+    """
     
-    return lib.linalg_helper.davidson(aop, x0, precond) # dot may be overloaded
+    return lib.linalg_helper.davidson(aop, x0, precond) # ZHC NOTE dot may be overloaded
 
 
 
-def svd(arrow, a, DMAX=0): # move to quantum number tensor class
+def svd(arrow, a, DMAX=0): # NOTE move to quantum number tensor class 
     """
     Thin Singular Value Decomposition
+    
+    Parameters
+    ----------
+    arrow : enum obj
+        Arrow.LeftArrow for left, Arrow.RightArrow for right.
+    a : ndarray
+        matrix to do svd.
+    DMAX: int
+        maximal dim to keep.
+     
+    Returns
+    -------
+    u : ndarray
+        left matrix
+    s : ndarray
+        sigular value
+    vt : ndarray
+        right matrix
+
     """
-    if arrow == Arrow.LeftArrow:
-        a = reshape(a, [a.shape[0]*a.shape[1], -1])
-        u, s, vt = scipy.linalg.svd(a)
+
+    if arrow == Arrow.LeftArrow: #ZHC NOTE the arrow is a number? then should be .value
+        a = reshape(a, [a.shape[0] * a.shape[1], -1])
+        u, s, vt = scipy.linalg.svd(a, full_matrices = False)
     elif arrow == Arrow.RightArrow:
         a = reshape(a, [a.shape[0], -1])
-        u, s, vt = scipy.linalg.svd(a)
+        u, s, vt = scipy.linalg.svd(a, full_matrices = False)
 
     M = len(s)
     if DMAX > 0:
@@ -58,7 +207,28 @@ def svd(arrow, a, DMAX=0): # move to quantum number tensor class
 
     return u, s, vt
 
-def canonicalize(forward, wfn0, mps0, M=0):
+def canonicalize(forward, wfn0, M = 0):
+    """
+    Canonicalize the wavefunction.
+    
+    Parameters
+    ----------
+    forward : int 
+        0 for left and 1 for right.
+    wfn0 : ndarray
+        current MPS.
+    M : int
+        bond dimension
+     
+    Returns
+    -------
+    mps0 : ndarray
+        canonicalized mps.
+    gaug : ndarray
+        gauge, i.e. sigma * v
+
+    """
+
     if forward:
         mps0, s, wfn1 = svd(Arrow.LeftArrow, wfn0, M)
         gaug = einsum("ij, jk -> ik", diag(s), wfn1)
@@ -69,6 +239,29 @@ def canonicalize(forward, wfn0, mps0, M=0):
         
 
 def renormalize(forward, mpo0, opr0, bra0, ket0):
+    """
+    Renormalized the block opr.
+    
+    Parameters
+    ----------
+    forward : int 
+        0 for left and 1 for right.
+    mpo0 : ndarray
+        MPO.
+    opr0 : ndarray
+        block opr.
+    bra0 : ndarray
+        upper MPS.
+    ket0 : ndarray
+        down MPS
+     
+    Returns
+    -------
+    opr1 : ndarray
+        renormalized block opr.
+
+    """
+    
     if forward:
         scr1 = einsum('laL, LNR -> laNR', opr0, bra0.conj())
         scr2 = einsum('laNR, anNb-> lnbR ', scr1, mpo0)
@@ -82,11 +275,38 @@ def renormalize(forward, mpo0, opr0, bra0, ket0):
 
 
 
+
 def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M=0):
+    """
+    Optimization for onesite algorithm.
+    
+    Parameters
+    ----------
+    forward : int 
+        0 for left and 1 for right.
+    mpo0 : ndarray
+        MPO.
+    lopr : ndarray
+        left block opr.
+    ropr : ndarray
+        right block opr.
+    wfn0 : ndarray
+        MPS for canoicalization.
+    wfn1 : ndarray
+        MPS.
+    M : int
+        bond dimension
+     
+    Returns
+    -------
+    energy : float or list of floats
+        The energy of desired root(s).
+
+    """
 
     diag = compute_diagonal_elements(mpo0, lopr, ropr)
     
-    energy = davidson(compute_sigmavector, diag, wfn0)
+    energy, coeff = davidson(compute_sigmavector, diag, wfn0)
 
     if forward:
         wfn0, gaug = canonicalize(1, wfn0, M) # wfn0 R => lmps gaug
@@ -96,6 +316,8 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M=0):
         wfn0, gaug = canonicalize(0, wfn0, M) # wfn0 R => lmps gaug
         wfn1 = einsum("ijk,kl->ijl", wfn1, gaug)
         ropr = renormalize(0, mpo0, ropr, wfn0, wfn0)
+
+    # ZHC NOTE should return the lopr and ropr as well, or store/on-site update
 
     return energy
 
