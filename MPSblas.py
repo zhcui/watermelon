@@ -144,3 +144,34 @@ def gemv(mpo,mps1,alpha=1,beta=1,mps2=None):
           new_mps[i] = np.einsum('anNb,lnr->alNbr',mpo,mps1)
 
 
+def dot(direction, bras, kets):
+    """
+    Dot of two wavefunction, return a scalar.
+    """
+        
+    L = len(bra)
+    assert(len(ket) == L)
+    
+    if direction == 'left':
+        E = einsum('lnR, lnr -> rR', bras[0], kets[0]) 
+        for i in xrange(1, N):
+            # contract with bra
+            E = einsum('rR, RnL -> rnL', E, bra[i])
+            # contract with ket
+            E = einsum('rnL, rnl -> lL', E, ket[i])
+        E = einsum('ll', E)
+    else:
+        E = einsum('Lnr, lnr -> lL', bras[-1], kets[-1]) 
+        for i in xrange(N - 1, -1, -1):
+            # contract with bra
+            E = einsum('lL, RnL -> lnR', E, bra[i])
+            # contract with ket
+            E = einsum('lnR, rnl -> rR', E, ket[i])
+        E = einsum('ll', E)
+    return E
+
+def norm(mpss):
+    """
+    2nd norm of a wavefunction.
+    """
+    return np.sqrt(dot('left', mpss.conj(), mpss))

@@ -517,14 +517,18 @@ def initialize_heisenberg(N, h, J, M):
     """
     Initialize the MPS, MPO and ropr.
     """
-    
     # MPS
+    '''
     mpss = []
     for i in range(int(N / 2)):
         mpss.append(np.ones((min(2 ** (i), M), 2, min(2 ** (i+1), M))))
     for i in range(int(N / 2))[::-1]:
         mpss.append(np.ones((min(2 ** (i + 1), M), 2, min(2 ** i, M))))
     mpss = np.asarray(mpss)
+    '''
+    mpss = MPSblas.create(2, D = M) 
+    normalize_fatcor = MPSblas.norm(mpss) 
+    mpss = scal(mpss, normalize_factor) 
     
     # MPO
     mpos = np.asarray(heisenberg_mpo(N, h, J))
