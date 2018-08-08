@@ -180,9 +180,11 @@ def svd(idx, a, DMAX=0):
     u : ndarray
         left matrix
     s : ndarray
-        sigular value
+        singular value
     vt : ndarray
         right matrix
+    dwt: float
+        discarded wt
     """
     idx0 = re.split(",", idx)
     assert len(idx0) == 2
@@ -191,7 +193,7 @@ def svd(idx, a, DMAX=0):
     nsplit = len(idx0) 
 
     a = reshape(a, [np.prod(a.shape[:nsplit], -1]])
-    u, s, vt = scipy.linalg.svd(a, full_matrices = False)
+    u, s, vt, dwt = scipy.linalg.svd(a, full_matrices = False)
     
     M = len(s)
     if DMAX > 0:
@@ -201,10 +203,12 @@ def svd(idx, a, DMAX=0):
     s = s[:M]
     vt = vt[:M,:]
 
+    dwt = np.sum(s[M:])
+    
     u = reshape(u, [a.shape[:nsplit] + [-1]])
     vt = reshape(vt, [a.shape[nsplit:]+[-1]])
 
-    return u, s, vt
+    return u, s, vt, dwt
     
 
 def canonicalize(forward, wfn0, M = 0):
@@ -230,10 +234,10 @@ def canonicalize(forward, wfn0, M = 0):
     """
 
     if forward:
-        mps0, s, wfn1 = svd("ij,k", wfn0, M)
+        mps0, s, wfn1, dwt = svd("ij,k", wfn0, M)
         gaug = einsum("ij, jk -> ik", diag(s), wfn1)
     else:
-        wfn1, s, mps0 = svd("i,jk", wfn0, M)
+        wfn1, s, mps0, dwt = svd("i,jk", wfn0, M)
         gaug = einsum("ij, jk -> ik", wfn1, diag(s))
     return mps0, gaug
         
