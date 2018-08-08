@@ -487,3 +487,24 @@ def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M=0)
 
     return energy, wfn0, wfn1, lopr, ropr
 
+
+def heisenberg_mpo(N, h, J):
+    """
+    Create Heisenberg MPO.
+    """
+    Sp = np.array([[0.0, 1.0], [0.0, 0.0]])
+    Sm = np.array([[0.0, 0.0], [1.0, 0.0]])
+    Sz = np.array([[0.5, 0.0], [0.0, -0.5]])
+    I = np.array([[1.0, 0.0], [0.0, 1.0]])
+    z = np.array([[0.0, 0.0], [0.0, 0.0]])
+    
+    W = []
+    W.append(np.einsum('abnN -> anNb', np.array([[-h * Sz, 0.5 * J * Sm, 0.5 * J * Sp, J * Sz, I]])))
+    for i in xrange(N-2):
+        W.append(np.einsum('abnN -> anNb', np.array([[I, z, z, z, z],
+                                                    [Sp, z, z, z, z],
+                                                    [Sm, z, z, z, z],
+                                                    [Sz, z, z, z, z],
+                                                    [-h * Sz, 0.5 * J * Sm, 0.5 * J * Sp, J * Sz, I]])))
+    W.append(np.einsum('abnN -> anNb', np.array([[I], [Sp], [Sm], [Sz], [-h * Sz]])))
+    return W
