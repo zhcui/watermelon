@@ -35,6 +35,7 @@ def calc_dim(dps,D):
 
     return dimMin
 
+
 def product_state(dps,occ):
     # dps:  list/array of integers specifying dimension of physical bonds at each site
     # occ:  occupancy vector (len L), numbers specifying physical bond index occupied
@@ -50,58 +51,96 @@ def product_state(dps,occ):
     
     return mps
 
-def scal(mps,alpha):
+
+def scal(alpha,mps):
     # result:  mps scaled by alpha
 
     L = len(mps)
+    new_mps = np.empty(L,dtype=np.object)
+
     const = float(abs(alpha))**(1./L)
     for i in range(L):
-        mps[i] *= const
+        new_mps[i] = mps[i].copy()*const
  
     # change sign as specified by alpha
-    mps[0] *= np.sign(alpha)
+    new_mps[0] *= np.sign(alpha)
 
+    return new_mps
 
 
 def conj(mps):
     # result: takes complex conjugate of mps
-    for i in range(len(mps)):
-        mps[i] = np.conj(mps[i])
+    L = len(mps)
+    new_mps = np.empty(L,dtype=np.object)
+
+    for i in range(L):
+        new_mps[i] = np.conj(mps[i])
+
+    return new_mps
 
 
-def axpy(alpha,mps1,mps2):
+def axpy(alpha,mpx1,mpx2):
     # alpha = scalar, mps1,mps2 are ndarrays of tensors   
     # returns alpha*mps1 + mps2
 
     mps_new = np.empty(len(mps1),dtype=np.object)
 
     scal(mps1,alpha)
-    assert(len(mps1)==len(mps2)), 'need to have same lengths: (%d,%d)'%(len(mps1),len(mps2))
+    assert(len(mpx1)==len(mpx2)), 'need to have same lengths: (%d,%d)'%(len(mpx1),len(mpx2))
     for i in range(len(mps1)):
-        l1,n1,r1 = mps1[i].shape
-        l2,n2,r2 = mps2[i].shape
-        assert(n1==n2)
+        sh1 = mpx1[i].shape
+        sh2 = mpx2[i].shape
+        assert(n1[1:-1]==n2[1:-2]), 'need physical bonds at site %d to match'%(i)        
+
+        l1,n1,r1 = sh1[0],np.prod(sh1[1:-1]),sh1[-1]
+        l2,n2,r2 = sh2[0],np.prod(sh2[1:-1]),sh2[-1]
+
         newSite = np.zeros((l1+l2,n1,r1+r2))
-        combine = (l1==l2,r1==r2)
+        newSite[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
+        newSite[l1:,:,r1:] = mpx2[i].reshape(l1,n2,r2)
 
-        iL1,iR1 = l1,r1
-        iL2,iR2 = l1,r1
- 
-        if combine[0]:           iL2 = 0
-        if combine[1]:           iR2 = 0
+        newSite = newSite.reshape(l1+l2,sh1[1:-1],r1+r2)
 
-        newSite[:iL1,:,:iR1] = mps1[i]
-        newSite[iL2:,:,iR2:] = mps2[i]
+        if i==0:  newSite = np.einsum('l...r->...r',newSite).reshape((1,)+sh1[1:-1]+(r1+r2,))
+        if i==L:  newSite = np.einsum('l...r->l...',newSite).reshape((l1+l2,)+sh1[1:-1]+(1,))
 
         mps_new[i] = newSite.copy()
     
     return mps_new
     
 
-def compress(mps,D):
-    pass
-    
-def inprod(mps1,mpo,mps2):
-    pass
+def inprod(arrow,mps1,mpo,mps2):\
+    # returns <mps2|mpo|mps2>
+
+    if   arrow == 0:       # contract left to right
+       mps1_ = mps1
+       mpo_  = mpo
+       mps2_ = mps2
+    elif arrow == 1:       # contract right to left
+       mps1_ = mps1[::-1]
+       mpo_  = mpo[::-1]
+       mps2_ = mps2[::-1]
+    else:
+       print '[inprod fct]: ???'
+   
+    in_site = np.einsum('lnr,anNb,LNR->rbR',mps1[0],mpo[0],mps2[0])
+    for i in range(1,L):
+        in_site = np.einsum('rbR,lnr,anNb,LNR',in_site,mps1[i],mpo[i],mps2[i])
+
+    assert(np.all(in_site == 1)), '[inprod fct: output not scalar'
+    return in_site.squeeze()
+
+
+def gemv(mpo,mps1,alpha=1,beta=1,mps2=None):
+   # returns alpha* mpo1 mps1 + beta mps2 
+   
+   L = len(mps1)
+   assert(len(mpo )==L), '[gemv: length of mps and mpo are not equal'
+   assert(len(mps2)==L), '[gemv: length of mps and mpo are not equal'
+
+   if mps2 is None:
+      new_mps = np.empty(L,dtype=np.object)
+      for i in range(L):
+          new_mps[i] = np.einsum('anNb,lnr->alNbr',mpo,mps1)
 
 
