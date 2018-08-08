@@ -98,9 +98,38 @@ def compute_diagonal_elements(mpo0, lopr, ropr):
     # ZHC NOTE check the SDcopy of upcast options
     return diag
 
+def compute_diagonal_elements_twosite(lmpo, rmpo, lopr, ropr):
+    lmpo_diag = einsum('annb -> anb', lmpo)
+    rmpo_diag = einsum('bmmc -> bmc', rmpo)
+    lopr = einsum('lal->la', lopr)
+    ropr = einsum('rcr->rc', ropr)
+
+    scr1 = einsum('la, anb->lnb', lopr, lmpo)
+    scr2 = einsum('lnb, bmc->lnmc', scr1, rmpo)
+    scr3 = einsum('lnmc, rc -> lnmr', scr2, ropr)
+    return scr3
+
+def compute_sigmavector_twosite(lmpo, rmpo, lopr, ropr, wfn0):
+    """
+    Compute the sigma vector, i.e. sigma = H * c
+    used for Davidson algorithm, in the twosite algorithm
+
+     _L N M R_
+    |___|_|___|
+    |___|_|___|
+    """
+    scr1 = einsum("laL,lnmr->aLnmr", lopr, wfn0)
+    scr2 = einsum("aLnmr,anNb->LmNbr", scr1, lmpo)
+    scr3 = einsum("LmNbr,bmMc->LNMrc", scr2, rmpo)
+    sgv0 = einsum("LNMcr,rcR->LNMR", scr3, ropr)
+    return sgv0
+    
+
+
+
 def compute_sigmavector(mpo0, lopr, ropr, wfn0):
     """
-    Compute the sigma vetor, i.e. sigma = H * c
+    Compute the sigma vector, i.e. sigma = H * c
     used for Davidson algorithm.
 
     Math
@@ -322,6 +351,27 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M=0):
     return energy
 
 
+def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M=0)
+    """
+    Optimization for twosite algorithm.
+    
+    Parameters
+    ----------
+    M : int
+        bond dimension
+     
+    Returns
+    -------
+    energy : float or list of floats
+        The energy of desired root(s).
+
+    """
+    wfn2 = einsum("lnr, rms -> lnms", lwfn, rwfn)
+    
+    diag = compute_diagonal_elements(lmpo, rmpo, lopr, ropr)
+    
+    energy, coeff = davidson(compute_sigmavector, diag, wfn0)
+    
 
 
 template<class Q>
