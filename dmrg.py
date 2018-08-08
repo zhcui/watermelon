@@ -346,6 +346,111 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M = 0):
 def sweep():
     pass
 
+def sweep(mpos, mpss, lopr, ropr, algo = 'ONESITE', M = 1, tol = 1e-5):
+    emin = 1.0e8
+    print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+    print "\t\t\tFORWARD SWEEP"
+    print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+    
+    N = len(mpss)
+    assert(len(mpos) == N);
+
+    for i in xrange(N - 1):
+
+        print "\t===================================================================================================="
+        print "\t\tSITE [  %5d  ] "%i
+        print "\t----------------------------------------------------------------------------------------------------"
+
+        #print "\t\tloading operators and wavefunction of next site (env)..."
+        #load(mpos[i+1], get_mpofile(input.prefix, i+1));
+        #load(mpss[i+1], get_mpsfile(input.prefix, RIGHTCANONICAL, i+1));
+        #cout << "done" << endl;
+        sys.flush()
+
+        # diagonalize
+        if(algo == 'ONESITE'):
+          print "\t\toptimizing wavefunction: 1-site algorithm "
+          #load(ropr, get_oprfile(input.prefix, RIGHTCANONICAL, i))
+          eswp = optimize_onesite(1, mpos[i], lopr, ropr, mpss[i], mpss[i + 1], M, 0.1 * tol)
+          #eswp = optimize_onesite_merged(1, mpos[i], lopr, ropr, mpss[i], mpss[i+1], 0.1*tol, M) # ZHC NOTE
+
+        else:
+          print "\t\toptimizing wavefunction: 2-site algorithm "
+          #load(ropr, get_oprfile(input.prefix, RIGHTCANONICAL, i+1));
+          eswp = optimize_twosite(1, mpos[i], mpos[i + 1], lopr, ropr, mpss[i], mpss[i + 1], M, 0.1 * tol)
+          #eswp = optimize_twosite_merged(1, mpos[i], mpos[i+1], lopr, ropr, mpss[i], mpss[i+1], 0.1*T, M);
+        
+        if(eswp < emin):
+            emin = eswp
+
+        # print result
+        print "\t\t--------------------------------------------------------------------------------"
+        print "\t\t\tEnergy = %20.10f "%eswp
+        print "\t\t--------------------------------------------------------------------------------"
+
+        #print "\t\tsaving operators and wavefunction of this site (sys)..."
+        sys.flush()
+        #save(mpss[i], get_mpsfile(input.prefix, LEFTCANONICAL, i));
+        #save(lopr,    get_oprfile(input.prefix, LEFTCANONICAL, i+1));
+        #mpos[i].clear(); ZHC NOTE
+        #mpss[i].clear();
+        print "done"
+    #save(mpss[N-1], get_mpsfile(input.prefix, WAVEFUNCTION, N-1));
+
+    print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" 
+    print "\t\t\tBACKWARD SWEEP" 
+    print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" 
+
+    #load(ropr, get_oprfile(input.prefix, RIGHTCANONICAL, N-1));
+
+    #for(size_t i = N-1; i > 0; --i) {
+    #for i in xrange(N-1):
+    for i in reversed(xrange(1, N)):
+          
+        print "\t===================================================================================================="
+        print "\t\tSITE [  %5d  ] "%i
+        print "\t----------------------------------------------------------------------------------------------------"
+
+        #print "\t\tloading operators and wavefunction of next site (env)..."
+        #load(mpos[i-1], get_mpofile(input.prefix, i-1));
+        #load(mpss[i-1], get_mpsfile(input.prefix, LEFTCANONICAL, i-1));
+        #print "done"
+
+        # diagonalize
+        if(algo == 'ONESITE'):
+          print "\t\toptimizing wavefunction: 1-site algorithm "
+          #load(ropr, get_oprfile(input.prefix, RIGHTCANONICAL, i))
+          eswp = optimize_onesite(0, mpos[i], lopr, ropr, mpss[i], mpss[i - 1], M, 0.1 * tol)
+          #eswp = optimize_onesite_merged(0, mpos[i],            lopr, ropr, mpss[i], mpss[i-1], 0.1*T, M);
+
+        else:
+          print "\t\toptimizing wavefunction: 2-site algorithm "
+          #load(ropr, get_oprfile(input.prefix, RIGHTCANONICAL, i+1));
+          eswp = optimize_twosite(0, mpos[i - 1], mpos[i], lopr, ropr, mpss[i - 1], mpss[i], 0.1 * tol, M)
+          #eswp = optimize_twosite_merged(0, mpos[i - 1], mpos[i], lopr, ropr, mpss[i - 1], mpss[i], 0.1*T, M);
+        
+        if(eswp < emin):
+            emin = eswp
+        # print result
+        print "\t\t--------------------------------------------------------------------------------"
+        print "\t\t\tEnergy = %20.10f "%eswp
+        print "\t\t--------------------------------------------------------------------------------"
+
+        #print "\t\tsaving operators and wavefunction for this site (sys)..." << flush;
+        #save(mpss[i], get_mpsfile(input.prefix, RIGHTCANONICAL, i));
+        #save(ropr,    get_oprfile(input.prefix, RIGHTCANONICAL, i-1));
+        #mpos[i].clear();
+        #mpss[i].clear();
+        print "done"
+    #save(mpss[0], get_mpsfile(input.prefix, WAVEFUNCTION, 0));
+    #mpos[0].clear();
+    #mpss[0].clear();
+
+    print "\t===================================================================================================="
+
+    return emin
+    
+
 
 def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M=0)
     """
