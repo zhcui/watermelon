@@ -44,6 +44,7 @@ Current convention for MPS and MPO indexing.
 """
 
 import numpy as np
+from np import einsum
 from pyscf import lib
 from enum import Enum
 
@@ -135,30 +136,15 @@ def compute_sigmavector(mpo0, lopr, ropr, wfn0):
     sgv0 = einsum('rbNL, rbR -> LNR', scr2, ropr)
     return sgv0
 	
-def davidson(aop0, x0, precond):
-    """
-    Davidson algorithm.
 
-    Parameters
-    ----------
-    aop0 : callable
-        function to compute sigma.
-    x0 : ndarray
-        initial state.
-    precond : ndarray
-        preconditioner. 
-     
-    Returns
-    -------
-    energy : float or list of floats
-        The energy of desired root(s).
-    coeff : ndarray or list of ndarray
-        The wavefunction.
+
+
+def mps_dot(bra, ket):
+    """
+    Dot function for two mps.
 
     """
-    
-    return lib.linalg_helper.davidson(aop, x0, precond) # ZHC NOTE dot may be overloaded
-
+    return einsum('lnr, lnr', bra.conj(), ket)
 
 
 def svd(arrow, a, DMAX=0): # NOTE move to quantum number tensor class 
@@ -274,9 +260,7 @@ def renormalize(forward, mpo0, opr0, bra0, ket0):
     return opr1    
 
 
-
-
-def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M=0):
+def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M = 0):
     """
     Optimization for onesite algorithm.
     
@@ -303,10 +287,40 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M=0):
         The energy of desired root(s).
 
     """
+    def davidson(x0, diag_flat):
+        """
+        Davidson algorithm.
 
-    diag = compute_diagonal_elements(mpo0, lopr, ropr)
+        Parameters
+        ----------
+        x0 : ndarray
+            initial state.
+        diag_flat : ndarray
+            precomputed diagonal elements, 1D array.
+         
+        Returns
+        -------
+        energy : float or list of floats
+            The energy of desired root(s).
+        coeff : ndarray or list of ndarray
+            The wavefunction.
+
+        """
+        mps_shape = x0.shape
+        def compute_sigma_flat(x):
+            return compute_sigmavector(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
+        def compute_precond_flat(dx, e, x0):
+            return dx / (diag_flat - e)
+
+        e, c = lib.linalg_helper.davidson(compute_sigma_flat, x0.ravel(), compute_precond_flat)
+        
+        return e, c.reshape(mps_shape)
+
+
+    #diag = compute_diagonal_elements(mpo0, lopr, ropr)
+    diag_flat = compute_diagonal_elements(mpo0, lopr, ropr).ravel()
     
-    energy, coeff = davidson(compute_sigmavector, diag, wfn0)
+    energy, wfn0 = davidson(wfn0, diag_flat)
 
     if forward:
         wfn0, gaug = canonicalize(1, wfn0, M) # wfn0 R => lmps gaug
@@ -317,9 +331,11 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M=0):
         wfn1 = einsum("ijk,kl->ijl", wfn1, gaug)
         ropr = renormalize(0, mpo0, ropr, wfn0, wfn0)
 
-    # ZHC NOTE should return the lopr and ropr as well, or store/on-site update
+    return energy, wfn0, wfn1, lopr, ropr
 
-    return energy
+
+def sweep():
+    pass
 
 
 
