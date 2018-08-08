@@ -1,4 +1,8 @@
+from enum import Enum
 
+class Arrow(Enum):
+    LeftArrow = 0
+    RightArrow = 1
 
 def compute_diagonal_elements(mpo0, lopr, ropr):
     pass
@@ -9,8 +13,43 @@ def compute_sigmavector(mpo0, lopr, ropr, wfn0):
 def davidson(aop0, x0, precond):
     pass
 
-def canonicalize():
-    pass
+
+
+def svd(arrow, a, DMAX=0): # move to quantum number tensor class
+    """
+    Thin Singular Value Decomposition
+    """
+    if arrow == Arrow.LeftArrow:
+        a = reshape(a, [a.shape[0]*a.shape[1], -1])
+        u, s, vt = scipy.linalg.svd(a)
+    elif arrow == Arrow.RightArrow:
+        a = reshape(a, [a.shape[0], -1])
+        u, s, vt = scipy.linalg.svd(a)
+
+    M = len(s)
+    if DMAX > 0:
+        M = min(DMAX, M)
+
+    u = u[:,:M]
+    s = s[:M]
+    vt = vt[:M,:]
+
+    if arrow == Arrow.LeftArrow:
+        u = reshape(u, [a.shape[0], a.shape[1], -1])
+    elif arrow == Arrow.RightArrow:
+        vt = reshape(vt, [M, a.shape[1], -1])
+
+    return u, s, vt
+
+def canonicalize(forward, wfn0, mps0, M=0):
+    if forward:
+        mps0, s, wfn1 = svd(Arrow.LeftArrow, wfn0, M)
+        gaug = einsum("ij, jk -> ik", diag(s), wfn1)
+    else:
+        wfn1, s, mps0 = svd(Arrow.RightArrow, wfn0, M)
+        gaug = einsum("ij, jk -> ik", wfn1, diag(s))
+    return mps0, gaug
+        
 
 def renormalize(forward, mpo0, opr0, bra0, ket0):
   if forward:
