@@ -1,3 +1,6 @@
+#! /usr/bin/env python 
+import numpy as np
+from pyscf import lib
 from enum import Enum
 
 class Arrow(Enum):
@@ -5,13 +8,27 @@ class Arrow(Enum):
     RightArrow = 1
 
 def compute_diagonal_elements(mpo0, lopr, ropr):
-    pass
+
+    mpo0_diag = einsum('annb -> anb', mpo0)
+    lopr_diag = einsum('lal -> la', lopr)
+    mpo0_diag = einsum('rbr -> rb', ropr)
+
+    scr1 = einsum('la, anb -> lnb', lopr_diag, mpo0_diag)
+    scr2 = einsum('lnb, rb -> lnr', scr1, ropr_diag)
+
+    diag = scr2
+    # ZHC NOTE check the SDcopy of upcast options
+    return diag
 
 def compute_sigmavector(mpo0, lopr, ropr, wfn0):
-    pass
-
+    scr1 = einsum('laL, lnr -> rnaL', lopr, wfn0)
+    scr2 = einsum('rnaL, anNb -> rbNL', scr1, mpo0)
+    sgv0 = einsum('rbNL, rbR -> LNR', scr2, ropr)
+    return sgv0
+	
 def davidson(aop0, x0, precond):
-    pass
+    
+    return lib.linalg_helper.davidson(aop, x0, precond) # dot may be overloaded
 
 
 
@@ -52,22 +69,16 @@ def canonicalize(forward, wfn0, mps0, M=0):
         
 
 def renormalize(forward, mpo0, opr0, bra0, ket0):
-  if forward:
-      
-    btas::QSDArray<4, Q> scr1;
-    btas::QSDcontract(1.0, opr0, btas::shape(0), bra0.conjugate(), btas::shape(0), 1.0, scr1);
-    btas::QSDArray<4, Q> scr2;
-    btas::QSDcontract(1.0, scr1, btas::shape(0, 2), mpo0, btas::shape(0, 1), 1.0, scr2);
-    btas::QSDcontract(1.0, scr2, btas::shape(0, 2), ket0, btas::shape(0, 1), 1.0, opr1);
-  }
-  else {
-    btas::QSDArray<4, Q> scr1;
-    btas::QSDcontract(1.0, bra0.conjugate(), btas::shape(2), opr0, btas::shape(0), 1.0, scr1);
-    btas::QSDArray<4, Q> scr2;
-    btas::QSDcontract(1.0, scr1, btas::shape(1, 2), mpo0, btas::shape(1, 3), 1.0, scr2);
-    btas::QSDcontract(1.0, scr2, btas::shape(3, 1), ket0, btas::shape(1, 2), 1.0, opr1);
-  }
-}
+    if forward:
+        scr1 = einsum('laL, LNR -> laNR', opr0, bra0.conj())
+        scr2 = einsum('laNR, anNb-> lnbR ', scr1, mpo0)
+        opr1 = einsum('lnbR, lnr-> rbR ', scr2, ket0)
+    else:
+        scr1 = einsum('LNR, rbR -> rbNL', bra0, opr0)
+        scr2 = einsum('rbNL, anNb -> rnaL', scr1, mpo0)
+        opr1 = einsum('rnaL, lnr-> laL ', scr2, ket0)
+    
+    return opr1    
 
 
 
