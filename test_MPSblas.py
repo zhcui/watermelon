@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 import numpy as np
 import MPSblas
+from MPSblas import asfull
 import pytest
 
 def test_rand():
@@ -111,26 +112,38 @@ def test_scal():
     ovlp  = MPSblas.dot(mps1.conj(),mps2)
 
     print 'scaling used: ', np.abs(alpha), np.angle(alpha)
-    print 'ratio of norms: ', norm2/norm1
-    print 'scaling', ovlp/(norm1**2)
+    print 'ratio of norms: ', norm2 / norm1
+    print 'scaling', ovlp / (norm1**2)
+    assert(np.allclose(norm1, norm2))
+    assert(np.allclose(ovlp / (norm1 ** 2), alpha))
 
 
 def test_axpby():
-    dps = [1,4,5]
-    mps1 = MPSblas.rand(dps,4)
-    mps2 = MPSblas.rand(dps,3)
+    dps = [1, 4, 5]
+    mps1 = MPSblas.rand(dps, 4)
+    mps2 = MPSblas.rand(dps, 3)
  
     alpha = 1
-    beta  = -1+3j
-    out_mps = MPSblas.axpby(alpha,mps1,beta,mps2)
+    beta  = -1 + 3j
+    out_mps = MPSblas.axpby(alpha, mps1, beta, mps2)
 
     for s in out_mps:  print s.shape
 
     print MPSblas.norm(mps1), MPSblas.norm(mps2), MPSblas.dot(mps1,mps2)
-    print 'expect', MPSblas.norm(mps1)**2*np.abs(alpha)**2 + MPSblas.norm(mps2)**2*np.abs(beta)**2\
+    expect_norm = MPSblas.norm(mps1)**2*np.abs(alpha)**2 + MPSblas.norm(mps2)**2*np.abs(beta)**2\
                   + MPSblas.dot(mps2,mps1.conj())*np.conj(alpha)*beta\
                   + MPSblas.dot(mps1,mps2.conj())*alpha*np.conj(beta)
+    print expect_norm 
     print MPSblas.norm(out_mps)**2
+    assert(np.allclose(MPSblas.norm(out_mps)**2, expect_norm))
+
+    mps1_f = asfull(mps1)
+    mps2_f = asfull(mps2)
+    out_mps_f = asfull(out_mps)
+    out_mps_f_standard = alpha * mps1_f + beta * mps2_f
+    
+    assert(np.allclose(out_mps_f, out_mps_f_standard))
+
 
     
 def test_compress():
