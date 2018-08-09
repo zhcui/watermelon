@@ -1,17 +1,32 @@
+#! /usr/bin/env python
 import numpy as np
 import MPSblas
+import pytest
 
 def test_rand():
-    dp = [1, 5, 4]
-    mps = MPSblas.rand(dp, 4)
-
+    dp = [1, 5, 4, 2, 4]
+    mps = MPSblas.rand(dp, 7)
+    mps_res_shape = [(1, 1, 1),
+                     (1, 5, 5),
+                     (5, 4, 7),
+                     (7, 2, 4),
+                     (4, 4, 1)]
+    
+    print "mps"
+    for i, x in enumerate(mps):
+        print x.shape
+        assert(np.allclose(x.shape, mps_res_shape[i]))
+    
     dp = [(1,2), (5,3), (4,4)]
     mpo = MPSblas.rand(dp, 4)
-    for x in mps:
+    mpo_res_shape = [(1, 1, 2, 2),
+                     (2, 5, 3, 4),
+                     (4, 4, 4, 1)]
+        
+    print "mpo"
+    for i, x in enumerate(mpo):
         print x.shape
-
-    for x in mpo:
-        print x.shape
+        assert(np.allclose(x.shape, mpo_res_shape[i]))
 
 
 def test_calc_dim():
@@ -19,8 +34,9 @@ def test_calc_dim():
     drs = MPSblas.calc_dim(dps, None)
     print drs
 
-    drs = MPSblas.calc_dim(dps, D=3)
+    drs = MPSblas.calc_dim(dps, D = 3)
     print drs
+
 
 def test_product_state():
     dp = (4, 5, 3)
