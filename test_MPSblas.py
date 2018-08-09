@@ -32,8 +32,11 @@ def test_scal():
     dps = [1, 5, 4]
     mps1 = MPSblas.create(dps, 4)
 
-    mps2 = MPSblas.scal(3., mps1)
+    mps2 = MPSblas.scal(-3.+1.j, mps1)
 
     print MPSblas.norm(mps1)
     print MPSblas.norm(mps2)
+    print MPSblas.norm(mps2)/MPSblas.norm(mps1)
+
+    
     

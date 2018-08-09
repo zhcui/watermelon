@@ -65,12 +65,13 @@ def scal(alpha,mps):
     L = len(mps)
     new_mps = np.empty(L,dtype=np.object)
 
-    const = float(abs(alpha))**(1./L)
+    const = np.abs(alpha)**(1./L)
+    dtype = np.result_type(alpha,mps[0])
     for i in range(L):
-        new_mps[i] = mps[i].copy()*const
+        new_mps[i] = np.array(mps[i],dtype=dtype)*const
  
     # change sign as specified by alpha
-    new_mps[0] *= np.sign(alpha)
+    new_mps[0] = np.exp(1j*np.angle(alpha))
 
     return new_mps
 
