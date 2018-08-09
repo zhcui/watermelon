@@ -217,30 +217,40 @@ def inprod(arrow,mps1,mpo,mps2):\
     for i in range(1,L):
         in_site = np.einsum('rbR,lnr,anNb,LNR',in_site,mps1[i],mpo[i],mps2[i])
 
-    assert(np.all(in_site == 1)), '[inprod fct: output not scalar'
+    assert(np.all(in_site == 1)), '[inprod fct]: output not scalar'
     return in_site.squeeze()
 
-def gemv(mpo,mps1,alpha=1,beta=1,mps2=None):
-   # returns alpha* mpo1 mps1 + beta mps2 
-   
-   L = len(mps1)
-   assert(len(mpo )==L), '[gemv: length of mps and mpo are not equal'
-   assert(len(mps2)==L), '[gemv: length of mps and mpo are not equal'
+def dot(mpx1,mpx2):
+    # returns mpsx1*mpsx2 (ie mpsx1 applied to mpsx2) in mpx form
+    
+    L = len(mpx1)
+    assert(len(mpx2)==L), '[gemv]: length of mpx1 and mpx2 are not equal'
+    new_mpx = np.empty(L,dtype=np.object)
+ 
+    if mpx2[0].ndim == 3:
+        for i in xrange(L):
+            new_site = einsum('L...nR,lnr->Ll...Rr',mpx1[i],mpx2[i])
+            nSh = new_site.shape
+            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],)+nSh[2:-2]+(nSh[-2]*nSh[-1]))
+    elif mpx2[0].ndim == 4:
+        for i in xrange(L):
+            new_site = einsum('L...nR,lnmr->Ll...mRr',mpx1[i],mpx2[i])
+            nSh = new_site.shape
+            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],)+nSh[2:-2]+(nSh[-2]*nSh[-1]))
+    else:
+        print('mpx of dim ', mpx2[0].ndim, ' has not yet been implemented')
+        exit()
 
-   if mps2 is None:
-      new_mps = np.empty(L,dtype=np.object)
-      for i in range(L):
-          new_mps[i] = np.einsum('anNb,lnr->alNbr',mpo,mps1)
+    return new_mpx
 
-def gemv_compress():
+
+def dot_compress():
     pass
 
 def gemm():
     pass
 
-def dot(bras, kets, direction='left'):
-    # GKC I think we should support MPS which don't have a
-    # dim=1 at the left/right ends
+def vdot(bras, kets, direction='left'):
     """
     Dot of two wavefunction, return a scalar.
     """
@@ -268,9 +278,10 @@ def dot(bras, kets, direction='left'):
     return E
 
 
+
 def norm(mpx):
     """
     2nd norm of a wavefunction.
     """
-    return np.sqrt(dot(mpx.conj(), mpx))
+    return np.sqrt(vdot(mpx.conj(), mpx))
 

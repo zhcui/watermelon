@@ -44,14 +44,12 @@ Current convention for MPS and MPO indexing.
 """
 
 import sys
-import numpy as np
-import scipy
-import MPSblas
-import re
-from numpy import einsum, reshape, diag
-from pyscf import lib
 from enum import Enum
+import numpy as np
+from numpy import einsum, reshape, diag
 import linalg
+import MPSblas
+from pyscf import lib
 
 class Arrow(Enum):
     """
@@ -239,6 +237,14 @@ def renormalize(forward, mpo0, opr0, bra0, ket0):
 
 
 def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
+    '''
+    print mpo0.shape
+    print lopr.shape
+    print ropr.shape
+    print wfn0.shape
+    print wfn1.shape
+    exit()
+    '''
     """
     Optimization for onesite algorithm.
     
@@ -265,25 +271,6 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
         The energy of desired root(s).
 
     """
-    # def davidson(x0, diag_flat):
-    #     """
-    #     Davidson algorithm.
-
-    #     Parameters
-    #     ----------
-    #     x0 : ndarray
-    #         initial state.
-    #     diag_flat : ndarray
-    #         precomputed diagonal elements, 1D array.
-         
-    #     Returns
-    #     -------
-    #     energy : float or list of floats
-    #         The energy of desired root(s).
-    #     coeff : ndarray or list of ndarray
-    #         The wavefunction.
-
-    #     """
 
     diag_flat = compute_diagonal_elements(mpo0, lopr, ropr).ravel()
     
@@ -309,7 +296,7 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
         return energy, wfn0, wfn1, ropr
 
 
-def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-5):
+def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-6):
     emin = 1.0e8
     print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
     print "\t\t\tFORWARD SWEEP"
@@ -318,17 +305,18 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-5):
     N = len(mpss)
     assert(len(mpos) == N);
 
-    for i in xrange(1, N - 1): 
-    #for i in xrange(N - 1): # ZHC NOTE start from site 1?
+    for i in xrange(0, N - 1): 
 
         print "\t===================================================================================================="
         print "\t\tSITE [  %5d  ] "%i
         print "\t----------------------------------------------------------------------------------------------------"
 
+        # ZHC NOTE : in future the mps, mpo and operator should be read from somewhere!
         #print "\t\tloading operators and wavefunction of next site (env)..."
         #load(mpos[i+1], get_mpofile(input.prefix, i+1));
         #load(mpss[i+1], get_mpsfile(input.prefix, RIGHTCANONICAL, i+1));
         #cout << "done" << endl;
+        
         sys.stdout.flush()
 
         # diagonalize
@@ -336,7 +324,7 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-5):
             print "\t\toptimizing wavefunction: 1-site algorithm "
             #load(ropr, get_oprfile(input.prefix, RIGHTCANONICAL, i))
             # ZHC NOTE store the old operators and mps
-            #eswp = optimize_onesite_merged(1, mpos[i], lopr, ropr, mpss[i], mpss[i+1], 0.1*tol, M) # ZHC NOTE
+            # ZHC NOTE we should at the beginning allocate a buffer which can handle all oprs!
             ropr = roprs.pop()
             eswp, mpss[i], mpss[i + 1], lopr = optimize_onesite(1, mpos[i], loprs[-1], ropr, mpss[i], mpss[i + 1], M, 0.1 * tol)
             loprs.append(lopr)
@@ -364,8 +352,6 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-5):
         #mpss[i].clear();
         print "done"
     #save(mpss[N-1], get_mpsfile(input.prefix, WAVEFUNCTION, N-1));
-    loprs.pop()    
-    roprs.append(ropr)
 
     print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" 
     print "\t\t\tBACKWARD SWEEP" 
@@ -373,9 +359,7 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-5):
 
     #load(ropr, get_oprfile(input.prefix, RIGHTCANONICAL, N-1));
 
-    #for(size_t i = N-1; i > 0; --i) {
-    #for i in xrange(N-1):
-    for i in xrange(N - 2, 0, -1):
+    for i in xrange(N - 1, 0, -1):
           
         print "\t===================================================================================================="
         print "\t\tSITE [  %5d  ] "%i
@@ -390,14 +374,10 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-5):
         if(algo == 'ONESITE'):
             print "\t\toptimizing wavefunction: 1-site algorithm "
             #load(ropr, get_oprfile(input.prefix, RIGHTCANONICAL, i))
-            #eswp = optimize_onesite(0, mpos[i], lopr, ropr, mpss[i], mpss[i - 1], M, 0.1 * tol)
-            #eswp, mpss[i], mpss[i - 1], lopr, ropr = optimize_onesite(0, mpos[i], lopr, ropr, mpss[i], mpss[i - 1], M, 0.1 * tol)
-            #print len()
             
             lopr = loprs.pop()
             eswp, mpss[i], mpss[i - 1], ropr = optimize_onesite(0, mpos[i], lopr, roprs[-1], mpss[i], mpss[i - 1], M, 0.1 * tol)
             roprs.append(ropr)
-            #eswp = optimize_onesite_merged(0, mpos[i],            lopr, ropr, mpss[i], mpss[i-1], 0.1*T, M);
 
         else:
             print "\t\toptimizing wavefunction: 2-site algorithm "
@@ -421,7 +401,6 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-5):
     #save(mpss[0], get_mpsfile(input.prefix, WAVEFUNCTION, 0));
     #mpos[0].clear();
     #mpss[0].clear();
-    loprs.append(lopr)
 
     print "\t===================================================================================================="
 
@@ -495,57 +474,40 @@ def initialize_heisenberg(N, h, J, M):
     Initialize the MPS, MPO, lopr and ropr.
     """
     # MPS
-    '''
-    mpss = []
-    for i in range(int(N / 2)):
-        mpss.append(np.ones((min(2 ** (i), M), 2, min(2 ** (i+1), M))))
-    for i in range(int(N / 2))[::-1]:
-        mpss.append(np.ones((min(2 ** (i + 1), M), 2, min(2 ** i, M))))
-    mpss = np.asarray(mpss)
-    '''
     mpss = MPSblas.create([2] * N, D = M) 
     normalize_factor = 1.0 / MPSblas.norm(mpss) 
     mpss = MPSblas.scal(normalize_factor, mpss) 
-    
+  
+    # make MPS right canonical
+    for i in xrange(N-1, 0, -1):
+        mpss[i], gaug = canonicalize(0, mpss[i], M = M)
+        mpss[i - 1] = einsum("ijk,kl->ijl", mpss[i - 1], gaug)
+
     # MPO
     mpos = np.asarray(heisenberg_mpo(N, h, J))
 
     # lopr
-    loprs = []
-    loprs.append(einsum('LNR, anNb, lnr -> rbR', mpss[0].conj(), mpos[0], mpss[0]))
-    
+    loprs = [np.array([[[1.0]]])]
     # ropr
-    roprs = []
-    roprs.append(einsum('LNR, anNb, lnr -> laL', mpss[-1].conj(), mpos[-1], mpss[-1]))
-    for i in xrange(N - 2, 1, -1):
+    roprs = [np.array([[[1.0]]])]
+    for i in xrange(N - 1, 0, -1):
         roprs.append(renormalize(0, mpos[i], roprs[-1], mpss[i].conj(), mpss[i]))
     
-    # NOTE the loprs and roprs should be list!
+    # NOTE the loprs and roprs should be list currently to support pop()!
     return mpss, mpos, loprs, roprs
     
 def test():
-    N = 8
-    h = 1.0
+    N = 30
+    h = 0.0
     J = 1.0
-    M = 1000
+    M = 50
     mpss, mpos, loprs, roprs = initialize_heisenberg(N, h, J, M)    
     energy = sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = M, tol = 1e-5)
-   
-    print energy
+    
+    print "Energy :", energy
+    print "Energy per site: ", energy/float(N)
     
 if __name__ == '__main__':
     test()
 
-    '''
-    print "mpss"
-    for i in xrange(len(mpss)):
-        print mpss[i].shape
-    print "mpos"
-    for i in xrange(len(mpos)):
-        print mpos[i].shape
-
-    print mpss.shape
-    print mpos.shape
-    print ropr.shape
-    '''
 
