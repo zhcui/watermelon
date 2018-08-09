@@ -1,47 +1,103 @@
+#! /usr/bin/env python
 import numpy as np
 import MPSblas
+import pytest
 
 def test_rand():
-    dp = [1, 5, 4]
-    mps = MPSblas.rand(dp, 4)
-
+    dp = [1, 5, 4, 2, 4]
+    mps = MPSblas.rand(dp, 7)
+    mps_res_shape = [(1, 1, 1),
+                     (1, 5, 5),
+                     (5, 4, 7),
+                     (7, 2, 4),
+                     (4, 4, 1)]
+    
+    print "mps"
+    for i, x in enumerate(mps):
+        print x.shape
+        assert(np.allclose(x.shape, mps_res_shape[i]))
+    
     dp = [(1,2), (5,3), (4,4)]
     mpo = MPSblas.rand(dp, 4)
-    for x in mps:
+    mpo_res_shape = [(1, 1, 2, 2),
+                     (2, 5, 3, 4),
+                     (4, 4, 4, 1)]
+        
+    print "mpo"
+    for i, x in enumerate(mpo):
         print x.shape
-
-    for x in mpo:
-        print x.shape
-
+        assert(np.allclose(x.shape, mpo_res_shape[i]))
 
 def test_calc_dim():
     dps = [5, 1, 4]
     drs = MPSblas.calc_dim(dps, None)
     print drs
+    assert(np.allclose(drs, [4, 4]))
 
-    drs = MPSblas.calc_dim(dps, D=3)
+    drs = MPSblas.calc_dim(dps, D = 3)
     print drs
+    assert(np.allclose(drs, [3, 3]))
+
 
 def test_product_state():
     dp = (4, 5, 3)
-    try:
-        mps = MPSblas.product_state(dp, [5, 5, 4])
-    except:
-        print "ok"
 
-    mps = MPSblas.product_state(dp, [0, 1, 2])
+    # out of range case
+    occ_idx = (5, 5, 4)
+    with pytest.raises(IndexError):
+        mps = MPSblas.product_state(dp, occ_idx)
 
-    print MPSblas.element(mps, [0, 1, 2])
+    occ_idx = (0, 1, 2)
+    mps = MPSblas.product_state(dp, occ_idx)
+
     for occ in np.ndindex(dp):
-        print occ, MPSblas.element(mps, tuple(occ))
-    print mps
+        if np.allclose(occ, occ_idx):
+            assert (np.allclose(MPSblas.element(mps, occ), 1.0))
+        else:
+            assert (np.allclose(MPSblas.element(mps, occ), 0.0))
+
 
 def test_asfull():
     dp = (4, 5, 3)
-    mps = MPSblas.product_state(dp, [0, 1, 2])
 
+    # test elemwise
+    mps = MPSblas.product_state(dp, [0, 1, 2])
+    vec = MPSblas.asfull(mps)
+
+    for i, occ in enumerate(np.ndindex(dp)):
+        assert abs(MPSblas.element(mps, occ) - vec[i]) < 1.e-10
+
+    # test mpo x mpo 
+    mpo = MPSblas.rand(zip(dp, dp))
+    mat = MPSblas.asfull(mpo)
     
+    mpo2 = MPSblas.dot(mpo, mpo)
+    mat2 = np.dot(mat, mat)
+
+    print np.linalg.norm(mat2)
+    print np.linalg.norm(MPSblas.asfull(mpo2))
     
+    assert np.linalg.norm(mat2 - MPSblas.asfull(mpo2)) < 1.e-9
+
+    # test mpo x mps
+    mps = MPSblas.rand(dp)
+    vec = MPSblas.asfull(mps)
+    matvec = np.dot(mat, vec)
+    mps1 = MPSblas.dot(mpo, mps)
+
+    assert np.linalg.norm(matvec - MPSblas.asfull(mps1)) < 1.e-9
+
+    # test mps x mpo
+    mps1 = MPSblas.dot(mps, mpo)
+    vecmat = np.dot(vec, mat)
+    assert np.linalg.norm(vecmat - MPSblas.asfull(mps1)) < 1.e-9
+    
+    # test mps x mps
+    norm1 = MPSblas.dot(mps, mps)
+    norm = np.dot(vec, vec)
+    assert abs(norm - norm1) < 1.e-9
+
+
     
 def test_scal():
     dps = [1, 5, 4]

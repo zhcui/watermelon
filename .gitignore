@@ -103,5 +103,11 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+# numpy
 *.pyc
 *.npy
+
+# pytest
+__pycache__
+
+

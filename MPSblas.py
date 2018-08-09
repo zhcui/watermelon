@@ -73,8 +73,14 @@ def calc_dim(dps,D=None):
 
 def element(mpx, occ):
     mats = [None] * len(mpx)
-    for i, m in enumerate(mpx):
-        mats[i] = mpx[i][:,occ[i],:]
+    try: # mpx is an mpo
+        if len(occ[0]) == 2:
+            for i, m in enumerate(mpx):
+                mats[i] = mpx[i][:,occ[i][0],occ[i][1],:]
+    except:
+        for i, m in enumerate(mpx):
+            mats[i] = mpx[i][:,occ[i],:]
+        
     return np.asscalar(reduce(np.dot, mats))
 
 def asfull(mpx):
@@ -86,7 +92,7 @@ def asfull(mpx):
         dense = np.zeros([n, n], dtype=dtype)
         for occi in np.ndindex(dp):
             i = np.ravel_multi_index(occi, dp)
-            for occj in np.index(dp):
+            for occj in np.ndindex(dp):
                 j = np.ravel_multi_index(occj, dp)
                 dense[i, j] = element(mpx, zip(occi, occj))
     else:
@@ -128,11 +134,6 @@ def scal(alpha,mps):
     new_mps[0] *= phase
 
     return new_mps
-
-
-def conj(mps):
-    # result: takes complex conjugate of mps
-    return mps.conj()
 
 
 def add(mpx1,mpx2):
@@ -188,7 +189,6 @@ def compress(mpx0, D, direction=0):
             u, s, vt, dwt = linalg.svd("ij,k", mpx[i], D)
             tot_dwt += dwt
             mpx[i] = u
-
             svt = np.dot(np.diag(s), vt)
             mpx[i+1] = einsum("lj,jnr", svt, mpx[i+1])
     else:
@@ -196,67 +196,115 @@ def compress(mpx0, D, direction=0):
             u, s, vt, dwt = linalg.svd("i,jk", mpx[i], D)
             tot_dwt += dwt
             mpx[i] = vt
-            
             us = np.dot(u,np.diag(s))
             mpx[i-1] = einsum("lnj,jr",  mpx[i-1], us)
 
     return mpx, tot_dwt
 
-def inprod(arrow,mps1,mpo,mps2):\
-    # returns <mps1|mpo|mps2>
+def inprod(mps1, mpo, mps2, direction=0):
+    """
+    Computes <MPS1 | MPO | MPS2>
+    
+    Note: bra is not conjugated, and
+          MPS1, MPS2 assumed to have OBC
 
-    if   arrow == 0:       # contract left to right
+    Parameters
+    ----------
+    mps1 : MPS
+    mpo : MPO
+    mps2 : MPS
+
+    Returns
+    -------
+    inprod : float
+
+    """
+    assert direction in (0, 1)
+    
+    if direction == 0:     # contract left to right
        mps1_ = mps1
        mpo_  = mpo
        mps2_ = mps2
-    elif arrow == 1:       # contract right to left
+    elif direction == 1:       # contract right to left
        mps1_ = mps1[::-1]
        mpo_  = mpo[::-1]
        mps2_ = mps2[::-1]
-    else:
-       print '[inprod fct]: ???'
    
-    in_site = np.einsum('lnr,anNb,LNR->rbR',mps1[0],mpo[0],mps2[0])
-    in_site = np.einsum('lnr,anNb,LNR->rbR',mps1[0],mpo[0],mps2[0])
+    E = np.einsum('lnr,anNb,LNR->rbR',
+                  mps1[0], mpo[0], mps2[0])
     for i in range(1,L):
-        in_site = np.einsum('rbR,lnr,anNb,LNR',in_site,mps1[i],mpo[i],mps2[i])
+        E = np.einsum('rbR,lnr,anNb,LNR',
+                      E, mps1[i], mpo[i], mps2[i])
 
-    assert(np.all(in_site == 1)), '[inprod fct]: output not scalar'
-    return in_site.squeeze()
+    return np.asscalar(E)
 
-def dot(mpx1,mpx2):
-    # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form
     
+def dot(mpx1, mpx2):
+    """
+    Computes MPX * MPX
+
+    Parameters
+    ----------
+    mpx1: MPO or MPS
+    mpx2: MPO or MPS
+
+    Returns
+    -------
+     new_mpx : float or MPS or MPO
+    """
+
     L = len(mpx1)
-    assert len(mpx2)==L, '[gemv]: lengths of mpx1 and mpx2 are not equal'
-    new_mpx = np.empty(L,dtype=np.object)
+    assert len(mpx2)==L, '[dot]: lengths of mpx1 and mpx2 are not equal'
+    new_mpx = np.empty(L, dtype=np.object)
 
     if mpx1[0].ndim == 3 and mpx2[0].ndim == 3:
-        return _mps_dot(mpx1, mpx2)
+        return mps_dot(mpx1, mpx2)
     
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 3:
         for i in range(L):
-            new_site = einsum('LnNR,lnr->LlNRr',mpx1[i],mpx2[i])
-            nSh = new_site.shape
-            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1], nSh[2], -1))
+            new_site = einsum('LNnR,lnr->LlNRr',mpx1[i],mpx2[i])
+            sh = new_site.shape
+            new_mpx[i] = new_site.reshape((sh[0]*sh[1], sh[2], -1))
 
     elif mpx1[0].ndim == 3 and mpx2[0].ndim == 4:
         for i in range(L):
-            new_site = einsum('LNR,lnNr->LlnRr',mpx1[i],mpx2[i])
-            nSh = new_site.shape
-            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1], nSh[2], -1))
+            new_site = einsum('LNR,lNnr->LlnRr',mpx1[i],mpx2[i])
+            sh = new_site.shape
+            new_mpx[i] = new_site.reshape((sh[0]*sh[1], sh[2], -1))
             
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 4:
         for i in range(L):
-            new_site = einsum('LNMR,lnNr->LlnMRr',mpx1[i],mpx2[i])
-            nSh = new_site.shape
-            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],nSh[2],nSh[3],-1))
+            new_site = einsum('LNMR,lMnr->LlNnRr',mpx1[i],mpx2[i])
+            sh = new_site.shape
+            new_mpx[i] = new_site.reshape((sh[0]*sh[1],sh[2],sh[3],-1))
+
     else:
-        print('mpx of dim ', mpx2[0].ndim, ' has not yet been implemented')
-        exit()
+        raise NotImplementedError, 'mpx of dim', mpx2[0].ndim, 'has not yet been implemented'
 
     return new_mpx
 
+def flatten(mpx):
+    """
+    Converts MPX object into MPS
+
+    Parameters
+    ----------
+    mpx : MPS or MPO
+
+    Returns
+    -------
+    mps : MPS
+    """
+    if mpx[0].ndim == 3: # already MPS
+        return mpx
+    else: # MPO
+        assert mpx[0].ndim == 4
+        L = len(mpx)
+        mps = np.empty_like(L)
+        for i in L:
+            sh = mpx[i].shape
+            mps[i] = np.reshape(mpx[i], (sh[0], sh[1]*sh[2], -1))
+        return mps
 
 def dot_compress(mpx1,mpx2,direction=0):
     # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form, with compression of each bond
@@ -298,38 +346,49 @@ def dot_compress(mpx1,mpx2,direction=0):
 
     return new_mpx
 
-def _mps_dot(bras, kets, direction='left'):
+def vdot(mps1, mps2, direction=0):
     """
-    Dot of two wavefunction, return a scalar.
+    vdot of two MPS, returns scalar
+
+    cf. np.vdot
     """
-    L = len(bras)
-    assert(len(kets) == L)
+    return mps_dot(np.conj(mps1), mps2, direction)
+
+def mps_dot(mps1, mps2, direction=0):
+    """
+    dot of two MPS, returns scalar
+    """
+    L = len(mps1)
+    assert len(mps2) == L
+    assert direction in (0, 1)
     
-    if direction == 'left':
-        E = einsum('lnR, lnr -> rR', bras[0], kets[0]) 
+    if direction == 0:
+        E = einsum('lnR, lnr -> rR', mps1[0], mps2[0]) 
         for i in xrange(1, L):
             # contract with bra
-            E = einsum('rR, RnL -> rnL', E, bras[i])
+            E = einsum('rR, RnL -> rnL', E, mps1[i])
             # contract with ket
-            E = einsum('rnL, rnl -> lL', E, kets[i])
-        assert(np.all([s==1 for s in E.shape])), '[dot: E is not scalar'
-        E = einsum('ll', E)
+            E = einsum('rnL, rnl -> lL', E, mps2[i])
     else:
-        E = einsum('Lnr, lnr -> lL', bras[-1], kets[-1]) 
+        E = einsum('Lnr, lnr -> lL', mps1[-1], mps2[-1]) 
         for i in xrange(L - 1, -1, -1):
             # contract with bra
-            E = einsum('lL, RnL -> lnR', E, bras[i])
+            E = einsum('lL, RnL -> lnR', E, mps1[i])
             # contract with ket
-            E = einsum('lnR, rnl -> rR', E, kets[i])
-        assert(np.all([s==1 for s in E.shape])), '[dot: E is not scalar'
-        E = einsum('ll', E)
-    return E
-
-
+            E = einsum('lnR, rnl -> rR', E, mps2[i])
+    return np.asscalar(E)
 
 def norm(mpx):    ### would this work with an MPO? [EY]
     """
-    2nd norm of a wavefunction.
+    2nd norm of a MPX
+
+    Parameters
+    ----------
+    mpx : MPS or MPO
+
+    Returns
+    -------
+    norm : scalar
     """
-    return np.sqrt(_mps_dot(mpx.conj(), mpx))
+    return np.sqrt(vdot(flatten(mpx), flatten(mpx)))
 
