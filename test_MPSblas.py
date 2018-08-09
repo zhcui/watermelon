@@ -51,7 +51,7 @@ def test_axpby():
     mps2 = MPSblas.create(dps,3)
  
     alpha = 1
-    beta  = 1
+    beta  = -1+3j
     out_mps = MPSblas.axpby(alpha,mps1,beta,mps2)
 
     for s in out_mps:  print s.shape
