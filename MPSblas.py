@@ -1,27 +1,57 @@
 import numpy as np
+
 from numpy import einsum, dot, sqrt
 import linalg
 
-### create MPS object as ndarray of ndarrays
-def create(dps,D=None):
-    # dps is a list/array of integers specifying the dimension of the physical bonds at each site
-    # cap MPS to virtual dimension D
-    # returns MPS object with 
+def create(dp, D=None, fn=np.zeros):
+    """
+    Create random MPX object as ndarray of ndarrays
 
-    L = len(dps)
-    mps = np.empty(L,dtype=np.object)
-    
+    Parameters
+    ----------
+    dp : list of ints or list of 2-tuples
+      Specifies physical dimensions of MPS or MPO. 
+    D : int, maximum bond dimension
+
+    Returns
+    -------
+    mpx : ndarray of ndarrays
+       MPS or MPO
+    """
+    L = len(dp)
+    mpx = np.empty(L, dtype=np.object)
+
+    try: # if MPO: get flattened phys. dim.
+        if len(dp[0]) == 2: 
+            _dp = [p0 * p1 for p0, p1 in dp]
+    except:
+        _dp = dp
+        
     # calculate right bond dims of each tensor
-    dim_rs = calc_dim(dps,D)
+    dim_rs = calc_dim(_dp,D)
 
-    # fill in MPS with random arrays of the correct shape
-    mps[0]  = np.random.rand(1,dps[0],dim_rs[0])
-    for i in range(1,L-1):
-        mps[i] = np.random.rand(dim_rs[i-1],dps[i],dim_rs[i])
-    mps[-1] = np.random.rand(dim_rs[-1],dps[-1],1)
+    # fill in MPX with random arrays of the correct shape
+    mpx[0]  = fn((1, _dp[0], dim_rs[0]))
+    for i in range(1, L-1):
+        mpx[i] = fn((dim_rs[i-1], _dp[i], dim_rs[i]))
+    mpx[-1] = fn((dim_rs[-1], _dp[-1], 1))
 
-    return mps
+    try: # if MPO: reshape flattened phys. dim.
+        if len(dp[0]) == 2: 
+            for i in range(L):
+                mpx[i] = np.reshape(mpx[i], [mpx[i].shape[0],
+                                             dp[i][0], dp[i][1],
+                                             mpx[i].shape[2]])
+    except:
+        pass
+            
+    return mpx
 
+def empty(dp, D=None):
+    return create(dp, D, fn=np.empty)
+
+def zeros(dp, D=None):
+    return create(dp, D, fn=np.zeros)
 
 def calc_dim(dps,D=None):
     # dps is a list/array of integers specifying the dimension of the physical bonds at each site
@@ -37,26 +67,42 @@ def calc_dim(dps,D=None):
 
     return dimMin
 
-def ceval(mps, occ):
-    mats = [None] * len(mps)
-    for i, m in enumerate(mps):
-        mats[i] = mps[i][:,occ[i],:]
+def element(mpx, occ):
+    mats = [None] * len(mpx)
+    for i, m in enumerate(mpx):
+        mats[i] = mpx[i][:,occ[i],:]
     return np.asscalar(reduce(np.dot, mats))
 
+def asfull(mpx):
+    dp = tuple(m.shape[1] for m in mpx)
 
-def product_state(dps,occ):
-    # dps:  list/array of integers specifying dimension of physical bonds at each site
+    n = np.prod(dp)
+    dtype = mpx[0].dtype
+    if mpx[0].shape == 4: # mpx is an mpo
+        dense = np.zeros([n, n], dtype=dtype)
+        for occi in np.ndindex(dp):
+            i = np.ravel_multi_index(occi, dp)
+            for occj in np.index(dp):
+                j = np.ravel_multi_index(occj, dp)
+                dense[i, j] = element(mpx, zip(occi, occj))
+    else:
+        assert mpx[0].shape == 3 # mpx is an mpo        
+        dense = np.zeros([n], dtype=dtype)
+        for occi in np.ndindex(dp):
+            i = np.ravel_multi_index(occi, dp)
+            dense[i] = element(mpx, occi)
+    return dense
+
+
+def product_state(dp, occ):
+    # dp:  list/array of integers specifying dimension of physical bonds at each site
     # occ:  occupancy vector (len L), numbers specifying physical bond index occupied
     # returns product state mps according to occ
-
-    L = len(dps)
-    mps = create(dps,1)
-
+    L = len(dp)
+    mps = zeros(dp, 1)
     for i in range(L):
-        site = np.zeros((1,dps[i],1))
-        site[0,occ[i],0] = 1.0
-        mps[i] = site.copy()
-    
+        mps[i][0, occ[i], 0] = 1.
+
     return mps
 
 
@@ -85,7 +131,11 @@ def conj(mps):
     return mps.conj()
 
 
+def add(mpx1,mpx2):
+    pass
+
 def axpby(alpha,mpx1,beta,mpx2):
+    # GKC: reimplement in terms of add and scal
     # alpha = scalar, mps1,mps2 are ndarrays of tensors   
     # returns alpha*mps1 + mps2
 
@@ -253,5 +303,5 @@ def norm(mpx):    ### would this work with an MPO? [EY]
     """
     2nd norm of a wavefunction.
     """
-    return np.sqrt(dot(mpx.conj(), mpx))
+    return np.sqrt(vdot(mpx.conj(), mpx))
 
