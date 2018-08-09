@@ -2,6 +2,9 @@ import re
 import numpy as np
 import scipy, scipy.linalg
 
+def reshape(idx):
+    pass
+
 def svd(idx, a, DMAX=0):
     """
     Thin Singular Value Decomposition
