@@ -123,48 +123,33 @@ def axpby(alpha,mpx1,beta,mpx2):
     
     return mps_new
     
-def compress(mpx, D, direction=0):
+def compress(mpx0, D, direction=0):
     tot_dwt = 0
-    L = len(mpx)
+    L = len(mpx0)
+
+    mpx = mpx0.copy()
+    
     if direction == 0:
         for i in range(L-1):
-            # redistribute norm over the chain for stability
-            nrm = np.linalg.norm(mpx[i])
-            mpx[i] *= 1./nrm
-            scal(nrm, mpx)
-
             u, s, vt, dwt = linalg.svd("ij,k", mpx[i], D)
             tot_dwt += dwt
             mpx[i] = u
 
             svt = np.dot(np.diag(s), vt)
             mpx[i+1] = einsum("lj,jnr", svt, mpx[i+1])
-
-        # redistribute norm over the chain for stability
-        nrm = np.linalg.norm(mpx[i])
-        mpx[i] *= 1./nrm
-        scal(nrm, mpx)        
     else:
         for i in range(L-1,0,-1):
-            nrm = np.linalg.norm(mpx[i])
-            mpx[i] *= 1./nrm
-            scal(nrm, mpx)
-
             u, s, vt, dwt = linalg.svd("i,jk", mpx[i], D)
             tot_dwt += dwt
+            mpx[i] = vt
             
             us = np.dot(u,np.diag(s))
             mpx[i-1] = einsum("lnj,jr",  mpx[i-1], us)
 
-        # redistribute norm over the chain for stability
-        nrm = np.linalg.norm(mpx[i], mpx[i].conj())
-        mpx[i] *= 1./nrm
-        scal(nrm, mpx)
-
-    return tot_dwt
+    return mpx, tot_dwt
 
 def inprod(arrow,mps1,mpo,mps2):\
-    # returns <mps2|mpo|mps2>
+    # returns <mps1|mpo|mps2>
 
     if   arrow == 0:       # contract left to right
        mps1_ = mps1
@@ -202,7 +187,6 @@ def dot(bras, kets, direction='left'):
     """
     Dot of two wavefunction, return a scalar.
     """
-        
     L = len(bras)
     assert(len(kets) == L)
     
@@ -227,9 +211,9 @@ def dot(bras, kets, direction='left'):
     return E
 
 
-def norm(mpss):
+def norm(mpx):
     """
     2nd norm of a wavefunction.
     """
-    return np.sqrt(dot(mpss.conj(), mpss))
+    return np.sqrt(dot(mpx.conj(), mpx))
 

@@ -47,14 +47,16 @@ def svd(idx, a, DMAX=0):
     return u, s, vt, dwt
 
 def test_linalg():
-    a = np.reshape(np.arange(24), [4,3,2])
+    import numpy.random
+    
+    a = np.random.random([4,4,4])
     print a.shape
-    u, s, vt, dwt = svd("ij,k", a, 1)
+    u, s, vt, dwt = svd("ij,k", a, 2)
     print u.shape, s.shape, vt.shape, dwt
     a2 = np.einsum("ijk,kl,lr", u, np.diag(s), vt)
     print np.linalg.norm(a2-a)
 
-    u, s, vt, dwt = svd("i,jk", a, 1)
+    u, s, vt, dwt = svd("i,jk", a, 2)
     print u.shape, s.shape, vt.shape, dwt
     a2 = np.einsum("ij,jk,klr", u, np.diag(s), vt)
     print np.linalg.norm(a2-a)
