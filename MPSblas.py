@@ -116,7 +116,7 @@ def product_state(dp, occ):
     return mps
 
 
-def scal(alpha,mps):
+def mul(alpha, mps):
     # result:  mps scaled by alpha
 
     L = len(mps)
@@ -136,11 +136,39 @@ def scal(alpha,mps):
     return new_mps
 
 
-def add(mpx1,mpx2):
-    pass
+def add(mpx1, mpx2):
+    L = len(mpx1)
+
+    new_mpx = np.empty(L, dtype=np.object)
+
+    dtype = np.result_type(mpx1[0], mpx2[0])
+
+    assert len(mpx1)==len(mpx2), 'need to have same lengths: (%d,%d)'%(len(mpx1),len(mpx2))
+
+    for i in range(L):
+        sh1 = mpx1[i].shape
+        sh2 = mpx2[i].shape
+        assert sh1[1:-1]==sh2[1:-1], 'need physical bonds at site %d to match'%(i)        
+
+        l1,n1,r1 = sh1[0],np.prod(sh1[1:-1]),sh1[-1]
+        l2,n2,r2 = sh2[0],np.prod(sh2[1:-1]),sh2[-1]
+
+        new_site = np.zeros((l1+l2,n1,r1+r2),dtype=dtype)
+        new_site[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
+        new_site[l1:,:,r1:] = mpx2[i].reshape(l2,n2,r2)
+
+        new_site = new_site.reshape((l1+l2,)+sh1[1:-1]+(r1+r2,))
+
+        if i==0:    new_site = np.einsum('l...r->...r',new_site).reshape((1,)+sh1[1:-1]+(r1+r2,))
+        if i==L-1:  new_site = np.einsum('l...r->l...',new_site).reshape((l1+l2,)+sh1[1:-1]+(1,))
+
+        new_mps[i] = new_site.copy()
+    
+    return new_mps
 
 def axpby(alpha,mpx1,beta,mpx2):
-    # GKC: reimplement in terms of add and scal
+    #return (alpha * mpx1) + (beta * mpx2)
+    # GKC: reimplement in terms of add and mul
     # alpha = scalar, mps1,mps2 are ndarrays of tensors   
     # returns alpha*mps1 + mps2
 
