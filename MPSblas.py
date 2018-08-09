@@ -171,7 +171,7 @@ def inprod(arrow,mps1,mpo,mps2):\
     return in_site.squeeze()
 
 def dot(mpx1,mpx2):
-    # returns mpsx1*mpsx2 (ie mpsx1 applied to mpsx2) in mpx form
+    # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form
     
     L = len(mpx1)
     assert(len(mpx2)==L), '[gemv]: length of mpx1 and mpx2 are not equal'
@@ -194,11 +194,31 @@ def dot(mpx1,mpx2):
     return new_mpx
 
 
-def dot_compress():
+def dot_compress(mpx1,mpx2,direction='left'):
+    # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form, with compression of each bond
+
+    L = len(mpx1)
+    assert(len(mpx2)==L)
+    new_mpx = np.empty(L,dtype=np.object)
+
+    if mpx2[0].ndim == 3:
+        new_site_L = einsum('L...nR,lnr->Ll...Rr',mpx1[0],mpx2[0])
+        nSh = new_site_L.shape
+        new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],)+nSh[2:-2]+(nSh[-2]*nSh[-1]))
+        for i in xrange(L):
+            new_site = einsum('L...nR,lnr->Ll...Rr',mpx1[i],mpx2[i])
+            nSh = new_site.shape
+            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],)+nSh[2:-2]+(nSh[-2]*nSh[-1]))
+    elif mpx2[0].ndim == 4:
+        for i in xrange(L):
+            new_site = einsum('L...nR,lnmr->Ll...mRr',mpx1[i],mpx2[i])
+            nSh = new_site.shape
+            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],)+nSh[2:-2]+(nSh[-2]*nSh[-1]))
+    else:
+        print('mpx of dim ', mpx2[0].ndim, ' has not yet been implemented')
+
     pass
 
-def gemm():
-    pass
 
 def vdot(bras, kets, direction='left'):
     """
@@ -229,7 +249,7 @@ def vdot(bras, kets, direction='left'):
 
 
 
-def norm(mpx):
+def norm(mpx):    ### would this work with an MPO? [EY]
     """
     2nd norm of a wavefunction.
     """
