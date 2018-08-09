@@ -27,7 +27,7 @@ def svd(idx, a, DMAX=0):
     assert len(idx0) == 2
     idx0[0].replace(" ", "")
 
-    nsplit = len(idx0) 
+    nsplit = len(idx0[0]) 
 
     a_shape = a.shape
     a = np.reshape(a, [np.prod(a.shape[:nsplit]), -1])
@@ -37,12 +37,26 @@ def svd(idx, a, DMAX=0):
     if DMAX > 0:
         M = min(DMAX, M)
 
+    dwt = np.sum(s[M:])
     u = u[:,:M]
     s = s[:M]
     vt = vt[:M,:]
 
-    dwt = np.sum(s[M:])
-    
     u = np.reshape(u, (a_shape[:nsplit] + (-1,)))
     vt = np.reshape(vt, ((-1,) + a_shape[nsplit:]))
     return u, s, vt, dwt
+
+def test_linalg():
+    a = np.reshape(np.arange(24), [4,3,2])
+    print a.shape
+    u, s, vt, dwt = svd("ij,k", a, 1)
+    print u.shape, s.shape, vt.shape, dwt
+    a2 = np.einsum("ijk,kl,lr", u, np.diag(s), vt)
+    print np.linalg.norm(a2-a)
+
+    u, s, vt, dwt = svd("i,jk", a, 1)
+    print u.shape, s.shape, vt.shape, dwt
+    a2 = np.einsum("ij,jk,klr", u, np.diag(s), vt)
+    print np.linalg.norm(a2-a)
+    
+    
