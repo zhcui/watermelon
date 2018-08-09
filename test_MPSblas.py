@@ -33,15 +33,50 @@ def test_product_state():
 
     print MPSblas.element(mps, [0, 1, 2])
     for occ in np.ndindex(dp):
-        print occ, MPSblas.element(mps, tuple(occ))
+        print occ, MPSblas.element(mps, occ)
     print mps
 
 def test_asfull():
     dp = (4, 5, 3)
-    mps = MPSblas.product_state(dp, [0, 1, 2])
 
+    # test elemwise
+    mps = MPSblas.product_state(dp, [0, 1, 2])
+    vec = MPSblas.asfull(mps)
+
+    for i, occ in enumerate(np.ndindex(dp)):
+        assert abs(MPSblas.element(mps, occ) - vec[i]) < 1.e-10
+
+    # test mpo x mpo 
+    mpo = MPSblas.rand(zip(dp, dp))
+    mat = MPSblas.asfull(mpo)
     
+    mpo2 = MPSblas.dot(mpo, mpo)
+    mat2 = np.dot(mat, mat)
+
+    print np.linalg.norm(mat2)
+    print np.linalg.norm(MPSblas.asfull(mpo2))
     
+    assert np.linalg.norm(mat2 - MPSblas.asfull(mpo2)) < 1.e-9
+
+    # test mpo x mps
+    mps = MPSblas.rand(dp)
+    vec = MPSblas.asfull(mps)
+    matvec = np.dot(mat, vec)
+    mps1 = MPSblas.dot(mpo, mps)
+
+    assert np.linalg.norm(matvec - MPSblas.asfull(mps1)) < 1.e-9
+
+    # test mps x mpo
+    mps1 = MPSblas.dot(mps, mpo)
+    vecmat = np.dot(vec, mat)
+    assert np.linalg.norm(vecmat - MPSblas.asfull(mps1)) < 1.e-9
+    
+    # test mps x mps
+    norm1 = MPSblas.dot(mps, mps)
+    norm = np.dot(vec, vec)
+    assert abs(norm - norm1) < 1.e-9
+
+
     
 def test_scal():
     dps = [1, 5, 4]

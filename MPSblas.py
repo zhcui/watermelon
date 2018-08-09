@@ -73,8 +73,14 @@ def calc_dim(dps,D=None):
 
 def element(mpx, occ):
     mats = [None] * len(mpx)
-    for i, m in enumerate(mpx):
-        mats[i] = mpx[i][:,occ[i],:]
+    try: # mpx is an mpo
+        if len(occ[0]) == 2:
+            for i, m in enumerate(mpx):
+                mats[i] = mpx[i][:,occ[i][0],occ[i][1],:]
+    except:
+        for i, m in enumerate(mpx):
+            mats[i] = mpx[i][:,occ[i],:]
+        
     return np.asscalar(reduce(np.dot, mats))
 
 def asfull(mpx):
@@ -86,7 +92,7 @@ def asfull(mpx):
         dense = np.zeros([n, n], dtype=dtype)
         for occi in np.ndindex(dp):
             i = np.ravel_multi_index(occi, dp)
-            for occj in np.index(dp):
+            for occj in np.ndindex(dp):
                 j = np.ravel_multi_index(occj, dp)
                 dense[i, j] = element(mpx, zip(occi, occj))
     else:
@@ -236,19 +242,22 @@ def dot(mpx1, mpx2):
     
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 3:
         for i in range(L):
-            new_site = einsum('LnNR,lnr->LlNRr',mpx1[i],mpx2[i])
+            #new_site = einsum('LnNR,lnr->LlNRr',mpx1[i],mpx2[i])
+            new_site = einsum('LNnR,lnr->LlNRr',mpx1[i],mpx2[i])
             nSh = new_site.shape
             new_mpx[i] = new_site.reshape((nSh[0]*nSh[1], nSh[2], -1))
 
     elif mpx1[0].ndim == 3 and mpx2[0].ndim == 4:
         for i in range(L):
-            new_site = einsum('LNR,lnNr->LlnRr',mpx1[i],mpx2[i])
+            #new_site = einsum('LNR,lnNr->LlnRr',mpx1[i],mpx2[i])
+            new_site = einsum('LNR,lNnr->LlnRr',mpx1[i],mpx2[i])
             nSh = new_site.shape
             new_mpx[i] = new_site.reshape((nSh[0]*nSh[1], nSh[2], -1))
             
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 4:
         for i in range(L):
-            new_site = einsum('LNMR,lnNr->LlnMRr',mpx1[i],mpx2[i])
+            #new_site = einsum('LNMR,lnNr->LlnMRr',mpx1[i],mpx2[i])
+            new_site = einsum('LNMR,lMnr->LlNnRr',mpx1[i],mpx2[i])
             nSh = new_site.shape
             new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],nSh[2],nSh[3],-1))
     else:
@@ -257,6 +266,17 @@ def dot(mpx1, mpx2):
 
     return new_mpx
 
+def asmps(mpx):
+    if mpx[0].ndim == 3: # already MPS
+        return mpx
+    else: # MPO
+        assert mpx[0].ndim == 4
+        L = len(mpx)
+        mps = np.empty_like(L)
+        for i in L:
+            sh = mpx[i].shape
+            mps[i] = np.reshape(mpx[i], (sh[0], sh[1]*sh[2], -1))
+        return mps
 
 def dot_compress():
     pass
