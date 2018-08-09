@@ -21,7 +21,7 @@ def create(dps,D=None):
     return mps
 
 
-def calc_dim(dps,D):
+def calc_dim(dps,D=None):
     # dps is a list/array of integers specifying the dimension of the physical bonds at each site
     # cap MPS to virtual dimension D
     # returns a list of the the right bond dimensions to be used in generating the MPS
@@ -34,6 +34,12 @@ def calc_dim(dps,D):
         dimMin = np.minimum(dimMin,[D]*(len(dps)-1))
 
     return dimMin
+
+def ceval(mps, occ):
+    mats = [None] * len(mps)
+    for i, m in enumerate(mps):
+        mats[i] = mps[i][:,occ[i],:]
+    return np.asscalar(reduce(np.dot, mats))
 
 
 def product_state(dps,occ):

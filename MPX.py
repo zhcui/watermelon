@@ -6,7 +6,7 @@ class MPX(object):
         self.mparray = mparray
 
     def __add__(self, other):
-        return MPX(axpy(1., self.mparray, other.mparray))
+        return MPX(axbpy(1., self.mparray, 1., other.mparray))
     
     def __sub__(self, other):
         return MPX(axpby(1., self.mparray, -1., other.mparray))

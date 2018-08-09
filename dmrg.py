@@ -528,7 +528,7 @@ def initialize_heisenberg(N, h, J, M):
     '''
     mpss = MPSblas.create(2, D = M) 
     normalize_fatcor = MPSblas.norm(mpss) 
-    mpss = scal(mpss, normalize_factor) 
+    mpss = MPSblas.scal(normalize_factor, mpss)
     
     # MPO
     mpos = np.asarray(heisenberg_mpo(N, h, J))
