@@ -1,5 +1,5 @@
 import numpy as np
-
+    
 ### create MPS object as ndarray of ndarrays
 def create(dps,D=None):
     # dps is a list/array of integers specifying the dimension of the physical bonds at each site
@@ -69,7 +69,7 @@ def conj(mps):
         mps[i] = np.conj(mps[i])
 
 
-def axpy(alpha,mps1,mps2):
+def axpby(alpha,mps1,mps2):
     # alpha = scalar, mps1,mps2 are ndarrays of tensors   
     # returns alpha*mps1 + mps2
 
@@ -97,11 +97,42 @@ def axpy(alpha,mps1,mps2):
     
     return mps_new
     
+def compress(mpx, D, direction):
+    tot_dwt = 0
+    if dir == 0:
+        for i in range(L-1):
+            # redistribute norm over the chain for stability
+            nrm = sqrt(dot(mpx[i], mpx[i].conj()))
+            mpx[i] *= 1./nrm
+            scal(nrm, mpx)
 
-def compress(mps,D):
-    pass
-    
-def inprod(mps1,mpo,mps2):
-    pass
+            u, s, vt, dwt = svd("ij,k", mpx[i], D)
+            tot_dwt += dwt
+            mpx[i] = u
 
+            svt = dot(diag(s), vt)
+            mpx[i+1] = einsum("lj,jnr", svt, mpx[i+1])
+
+        # redistribute norm over the chain for stability
+        nrm = sqrt(dot(mpx[i], mpx[i].conj()))
+        mpx[i] *= 1./nrm
+        scal(nrm, mpx)        
+    else:
+        for i in range(L-1,0,-1):
+            nrm = sqrt(dot(mpx[i], mpx[i].conj()))
+            mpx[i] *= 1./nrm
+            scal(nrm, mpx)
+
+            u, s, vt, dwt = svd("i,jk", mpx[i], D)
+            tot_dwt += dwt
+            
+            us = dot(u,diag(s))
+            mpx[i-1] = einsum("lnj,jr",  mpx[i-1], us)
+
+        # redistribute norm over the chain for stability
+        nrm = sqrt(dot(mpx[i], mpx[i].conj()))
+        mpx[i] *= 1./nrm
+        scal(nrm, mpx)
+
+    return tot_dwt
 
