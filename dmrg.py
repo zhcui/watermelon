@@ -44,7 +44,8 @@ Current convention for MPS and MPO indexing.
 """
 
 import numpy as np
-from np import einsum
+import MPSblas
+from numpy import einsum
 from pyscf import lib
 from enum import Enum
 
@@ -192,7 +193,7 @@ def svd(idx, a, DMAX=0):
 
     nsplit = len(idx0) 
 
-    a = reshape(a, [np.prod(a.shape[:nsplit], -1]])
+    a = reshape(a, [np.prod(a.shape[:nsplit]), -1])
     u, s, vt, dwt = scipy.linalg.svd(a, full_matrices = False)
     
     M = len(s)
@@ -452,7 +453,7 @@ def sweep(mpos, mpss, lopr, ropr, algo = 'ONESITE', M = 1, tol = 1e-5):
     
 
 
-def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M=0)
+def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M = 0):
     """
     Optimization for twosite algorithm.
     
@@ -526,9 +527,9 @@ def initialize_heisenberg(N, h, J, M):
         mpss.append(np.ones((min(2 ** (i + 1), M), 2, min(2 ** i, M))))
     mpss = np.asarray(mpss)
     '''
-    mpss = MPSblas.create(2, D = M) 
-    normalize_fatcor = MPSblas.norm(mpss) 
-    mpss = MPSblas.scal(normalize_factor, mpss)
+    mpss = MPSblas.create([2] * N, D = M) 
+    normalize_factor = MPSblas.norm(mpss) 
+    mpss = MPSblas.scal(1.0 / normalize_factor, mpss) 
     
     # MPO
     mpos = np.asarray(heisenberg_mpo(N, h, J))
