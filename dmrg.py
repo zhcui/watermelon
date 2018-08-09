@@ -541,5 +541,14 @@ def initialize_heisenberg(N, h, J, M):
     return mpss, mpos, ropr
     
     
+if __name__ == '__main__':
+    N = 5
+    h = 1.0
+    J = 1.0
+    M = 7
+    mpss, mpos, ropr = initialize_heisenberg(N, h, J, M)    
+    print mpss
+    print mpos
+    print ropr
 
 
