@@ -167,7 +167,8 @@ def add(mpx1, mpx2):
     return new_mps
 
 def axpby(alpha,mpx1,beta,mpx2):
-    # GKC: reimplement in terms of add and scal
+    #return (alpha * mpx1) + (beta * mpx2)
+    # GKC: reimplement in terms of add and mul
     # alpha = scalar, mps1,mps2 are ndarrays of tensors   
     # returns alpha*mps1 + mps2
 
