@@ -28,29 +28,34 @@ def test_rand():
         print x.shape
         assert(np.allclose(x.shape, mpo_res_shape[i]))
 
-
 def test_calc_dim():
     dps = [5, 1, 4]
     drs = MPSblas.calc_dim(dps, None)
     print drs
+    assert(np.allclose(drs, [4, 4]))
 
     drs = MPSblas.calc_dim(dps, D = 3)
     print drs
+    assert(np.allclose(drs, [3, 3]))
 
 
 def test_product_state():
     dp = (4, 5, 3)
-    try:
-        mps = MPSblas.product_state(dp, [5, 5, 4])
-    except:
-        print "ok"
 
-    mps = MPSblas.product_state(dp, [0, 1, 2])
+    # out of range case
+    occ_idx = (5, 5, 4)
+    with pytest.raises(IndexError):
+        mps = MPSblas.product_state(dp, occ_idx)
 
-    print MPSblas.element(mps, [0, 1, 2])
+    occ_idx = (0, 1, 2)
+    mps = MPSblas.product_state(dp, occ_idx)
+
     for occ in np.ndindex(dp):
-        print occ, MPSblas.element(mps, occ)
-    print mps
+        if np.allclose(occ, occ_idx):
+            assert (np.allclose(MPSblas.element(mps, occ), 1.0))
+        else:
+            assert (np.allclose(MPSblas.element(mps, occ), 0.0))
+
 
 def test_asfull():
     dp = (4, 5, 3)
