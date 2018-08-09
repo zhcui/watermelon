@@ -239,6 +239,14 @@ def renormalize(forward, mpo0, opr0, bra0, ket0):
 
 
 def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
+    '''
+    print mpo0.shape
+    print lopr.shape
+    print ropr.shape
+    print wfn0.shape
+    print wfn1.shape
+    exit()
+    '''
     """
     Optimization for onesite algorithm.
     
@@ -318,7 +326,7 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-5):
     N = len(mpss)
     assert(len(mpos) == N);
 
-    for i in xrange(1, N - 1): 
+    for i in xrange(0, N-1): 
     #for i in xrange(N - 1): # ZHC NOTE start from site 1?
 
         print "\t===================================================================================================="
@@ -364,8 +372,8 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-5):
         #mpss[i].clear();
         print "done"
     #save(mpss[N-1], get_mpsfile(input.prefix, WAVEFUNCTION, N-1));
-    loprs.pop()    
-    roprs.append(ropr)
+    #loprs.pop()    
+    #roprs.append(ropr)
 
     print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" 
     print "\t\t\tBACKWARD SWEEP" 
@@ -375,7 +383,7 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-5):
 
     #for(size_t i = N-1; i > 0; --i) {
     #for i in xrange(N-1):
-    for i in xrange(N - 2, 0, -1):
+    for i in xrange(N - 1, 0, -1):
           
         print "\t===================================================================================================="
         print "\t\tSITE [  %5d  ] "%i
@@ -421,7 +429,8 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'ONESITE', M = 1, tol = 1e-5):
     #save(mpss[0], get_mpsfile(input.prefix, WAVEFUNCTION, 0));
     #mpos[0].clear();
     #mpss[0].clear();
-    loprs.append(lopr)
+    #loprs.append(lopr)
+    #roprs.pop()
 
     print "\t===================================================================================================="
 
@@ -511,13 +520,13 @@ def initialize_heisenberg(N, h, J, M):
     mpos = np.asarray(heisenberg_mpo(N, h, J))
 
     # lopr
-    loprs = []
-    loprs.append(einsum('LNR, anNb, lnr -> rbR', mpss[0].conj(), mpos[0], mpss[0]))
-    
+    loprs = [np.array([[[1.0]]])]
+    #loprs.append(einsum('LNR, anNb, lnr -> rbR', mpss[0].conj(), mpos[0], mpss[0]))
+    #loprs.append(renormalize(1, mpos[0], loprs[-1], mpss[0].conj(), mpss[0]))   
     # ropr
-    roprs = []
-    roprs.append(einsum('LNR, anNb, lnr -> laL', mpss[-1].conj(), mpos[-1], mpss[-1]))
-    for i in xrange(N - 2, 1, -1):
+    roprs = [np.array([[[1.0]]])]
+    #roprs.append(einsum('LNR, anNb, lnr -> laL', mpss[-1].conj(), mpos[-1], mpss[-1]))
+    for i in xrange(N - 1, 0, -1):
         roprs.append(renormalize(0, mpos[i], roprs[-1], mpss[i].conj(), mpss[i]))
     
     # NOTE the loprs and roprs should be list!
