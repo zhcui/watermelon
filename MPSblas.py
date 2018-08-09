@@ -47,11 +47,15 @@ def create(dp, D=None, fn=np.zeros):
             
     return mpx
 
-def empty(dp, D=None):
+def empty(dp, D = None):
     return create(dp, D, fn=np.empty)
 
-def zeros(dp, D=None):
+def zeros(dp, D = None):
     return create(dp, D, fn=np.zeros)
+
+def rand(dp, D = None):
+    return create(dp, D, fn=np.random.random)
+
 
 def calc_dim(dps,D=None):
     # dps is a list/array of integers specifying the dimension of the physical bonds at each site

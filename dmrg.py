@@ -474,7 +474,7 @@ def initialize_heisenberg(N, h, J, M):
     Initialize the MPS, MPO, lopr and ropr.
     """
     # MPS
-    mpss = MPSblas.create([2] * N, D = M) 
+    mpss = MPSblas.rand([2] * N, D = M) 
     normalize_factor = 1.0 / MPSblas.norm(mpss) 
     mpss = MPSblas.scal(normalize_factor, mpss) 
   
