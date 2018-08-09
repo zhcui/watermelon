@@ -163,12 +163,12 @@ def inprod(arrow,mps1,mpo,mps2):\
        print '[inprod fct]: ???'
    
     in_site = np.einsum('lnr,anNb,LNR->rbR',mps1[0],mpo[0],mps2[0])
+    in_site = np.einsum('lnr,anNb,LNR->rbR',mps1[0],mpo[0],mps2[0])
     for i in range(1,L):
         in_site = np.einsum('rbR,lnr,anNb,LNR',in_site,mps1[i],mpo[i],mps2[i])
 
     assert(np.all(in_site == 1)), '[inprod fct: output not scalar'
     return in_site.squeeze()
-
 
 def gemv(mpo,mps1,alpha=1,beta=1,mps2=None):
    # returns alpha* mpo1 mps1 + beta mps2 
@@ -182,6 +182,11 @@ def gemv(mpo,mps1,alpha=1,beta=1,mps2=None):
       for i in range(L):
           new_mps[i] = np.einsum('anNb,lnr->alNbr',mpo,mps1)
 
+def gemv_compress():
+    pass
+
+def gemm():
+    pass
 
 def dot(bras, kets, direction='left'):
     """
