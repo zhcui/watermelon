@@ -1,5 +1,6 @@
 import numpy as np
-    
+from numpy import einsum
+
 ### create MPS object as ndarray of ndarrays
 def create(dps,D=None):
     # dps is a list/array of integers specifying the dimension of the physical bonds at each site
@@ -200,7 +201,7 @@ def dot(direction, bras, kets):
     
     if direction == 'left':
         E = einsum('lnR, lnr -> rR', bras[0], kets[0]) 
-        for i in xrange(1, N):
+        for i in xrange(1, L):
             # contract with bra
             E = einsum('rR, RnL -> rnL', E, bras[i])
             # contract with ket
@@ -208,7 +209,7 @@ def dot(direction, bras, kets):
         E = einsum('ll', E)
     else:
         E = einsum('Lnr, lnr -> lL', bras[-1], kets[-1]) 
-        for i in xrange(N - 1, -1, -1):
+        for i in xrange(L - 1, -1, -1):
             # contract with bra
             E = einsum('lL, RnL -> lnR', E, bras[i])
             # contract with ket
