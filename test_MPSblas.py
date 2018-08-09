@@ -1,11 +1,16 @@
 import numpy as np
 import MPSblas
 
-def test_create():
-    dps = [1, 5, 4]
-    mps = MPSblas.create(dps, 4)
+def test_rand():
+    dp = [1, 5, 4]
+    mps = MPSblas.rand(dp, 4)
 
+    dp = [(1,2), (5,3), (4,4)]
+    mpo = MPSblas.rand(dp, 4)
     for x in mps:
+        print x.shape
+
+    for x in mpo:
         print x.shape
 
 
@@ -18,20 +23,29 @@ def test_calc_dim():
     print drs
 
 def test_product_state():
-    dps = [4, 5, 3]
+    dp = (4, 5, 3)
     try:
-        mps = MPSblas.product_state(dps, [5, 5, 4])
+        mps = MPSblas.product_state(dp, [5, 5, 4])
     except:
         print "ok"
 
-    mps = MPSblas.product_state(dps, [0, 1, 2])
+    mps = MPSblas.product_state(dp, [0, 1, 2])
 
-    print MPSblas.ceval(mps, [0, 1, 2])
+    print MPSblas.element(mps, [0, 1, 2])
+    for occ in np.ndindex(dp):
+        print occ, MPSblas.element(mps, tuple(occ))
     print mps
 
+def test_asfull():
+    dp = (4, 5, 3)
+    mps = MPSblas.product_state(dp, [0, 1, 2])
+
+    
+    
+    
 def test_scal():
     dps = [1, 5, 4]
-    mps1 = MPSblas.create(dps, 4)
+    mps1 = MPSblas.rand(dps, 4)
 
     alpha = -1
     mps2 = MPSblas.scal(alpha, mps1)
@@ -47,8 +61,8 @@ def test_scal():
 
 def test_axpby():
     dps = [1,4,5]
-    mps1 = MPSblas.create(dps,4)
-    mps2 = MPSblas.create(dps,3)
+    mps1 = MPSblas.rand(dps,4)
+    mps2 = MPSblas.rand(dps,3)
  
     alpha = 1
     beta  = -1+3j
@@ -66,7 +80,7 @@ def test_axpby():
 def test_compress():
     dps = [4, 4, 2, 3]
 
-    mps1 = MPSblas.create(dps, D=5)
+    mps1 = MPSblas.rand(dps, D=5)
 
     mps2, dwt2 = MPSblas.compress(mps1, D=3)
     mps3, dwt3 = MPSblas.compress(mps1, D=2)
