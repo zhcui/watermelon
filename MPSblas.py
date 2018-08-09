@@ -79,15 +79,18 @@ def conj(mps):
     return new_mps
 
 
-def axpy(alpha,mpx1,mpx2):
+def axpby(alpha,mpx1,beta,mpx2):
     # alpha = scalar, mps1,mps2 are ndarrays of tensors   
     # returns alpha*mps1 + mps2
 
-    mps_new = np.empty(len(mps1),dtype=np.object)
+    L = len(mps1)
+    mps_new = np.empty(L,dtype=np.object)
+    
+    const_a = float(abs(alpha))**(1./L)
+    const_b = float(abs(beta))**(1./L)
 
-    scal(mps1,alpha)
     assert(len(mpx1)==len(mpx2)), 'need to have same lengths: (%d,%d)'%(len(mpx1),len(mpx2))
-    for i in range(len(mps1)):
+    for i in range(len(mpx1)):
         sh1 = mpx1[i].shape
         sh2 = mpx2[i].shape
         assert(n1[1:-1]==n2[1:-2]), 'need physical bonds at site %d to match'%(i)        
@@ -95,9 +98,14 @@ def axpy(alpha,mpx1,mpx2):
         l1,n1,r1 = sh1[0],np.prod(sh1[1:-1]),sh1[-1]
         l2,n2,r2 = sh2[0],np.prod(sh2[1:-1]),sh2[-1]
 
+        if i==0: 
+            sign_a, sign_b = sign(a), sign(b)
+        else:
+            sign_a, sign_b = 1,1
+
         newSite = np.zeros((l1+l2,n1,r1+r2))
-        newSite[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
-        newSite[l1:,:,r1:] = mpx2[i].reshape(l1,n2,r2)
+        newSite[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)*const_a*sign_a
+        newSite[l1:,:,r1:] = mpx2[i].reshape(l1,n2,r2)*const_b*sign_b
 
         newSite = newSite.reshape(l1+l2,sh1[1:-1],r1+r2)
 
