@@ -317,5 +317,5 @@ def norm(mpx):
     """
     2nd norm of a wavefunction.
     """
-    return np.sqrt(vdot(mpx.conj(), mpx))
+    return np.sqrt(dot(mpx.conj(), mpx))
 
