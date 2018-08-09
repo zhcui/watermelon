@@ -251,6 +251,13 @@ def dot_compress(mpx1,mpx2,direction='left'):
     assert(len(mpx2)==L)
     new_mpx = np.empty(L,dtype=np.object)
 
+    if direction == 'right':
+        mpx1_ = [np.swapaxes(m,0,-1) for m in mpx1[::-1]]   # taking the left/right transpose
+        mpx2_ = [np.swapaxes(m,0,-1) for m in mpx2[::-1]]
+    else:
+        mpx1_ = mpx1
+        mpx2_ = mpx2
+
     if mpx2[0].ndim == 3:
         new_site_L = einsum('L...nR,lnr->Ll...Rr',mpx1[0],mpx2[0])
         nSh = new_site_L.shape
