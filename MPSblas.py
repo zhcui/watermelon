@@ -279,7 +279,7 @@ def dot(mpx1, mpx2):
             new_mpx[i] = new_site.reshape((sh[0]*sh[1],sh[2],sh[3],-1))
 
     else:
-        raise NotImplementedError, 'mpx of dim', mpx2[0].ndim, 'has not yet been implemented'
+        raise NotImplementedError('mpx of dim', mpx2[0].ndim, 'has not yet been implemented')
 
     return new_mpx
 
@@ -306,43 +306,56 @@ def flatten(mpx):
             mps[i] = np.reshape(mpx[i], (sh[0], sh[1]*sh[2], -1))
         return mps
 
-def dot_compress(mpx1,mpx2,direction=0):
+def dot_compress(mpx1,mpx2,D,direction=0):
     # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form, with compression of each bond
 
     L = len(mpx1)
     assert(len(mpx2)==L)
     new_mpx = np.empty(L,dtype=np.object)
+    tot_dwt = 0
 
     if not direction == 0:
-        mpx1_ = [np.swapaxes(m,0,-1) for m in mpx1[::-1]]   # taking the left/right transpose
-        mpx2_ = [np.swapaxes(m,0,-1) for m in mpx2[::-1]]
+        mpx1 = [np.swapaxes(m,0,-1) for m in mpx1_[::-1]]   # taking the left/right transpose
+        mpx2 = [np.swapaxes(m,0,-1) for m in mpx2_[::-1]]
     else:
-        mpx1_ = mpx1
-        mpx2_ = mpx2
+        mpx1 = mpx1_
+        mpx2 = mpx2_
 
     if mpx1[0].ndim == 3 and mpx2[0].ndim == 3:
-        return _mps_dot(mpx1, mpx2)
+        return mps_dot(mpx1, mpx2)
     
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 3:
-        for i in range(L):
-            new_site = einsum('LnNR,lnr->LlNRr',mpx1[i],mpx2[i])
-            nSh = new_site.shape
-            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1], nSh[2], -1))
+        prev_site = einsum('LNnR,lnr->LlNRr',mpx1[0],mpx2[0])
+        prev_site = linalg.reshape(prev_site,'ab,c,de')
+        for i in range(1,L):
+            new_site = einsum('LNnR,lnr->LlNRr',mpx1[i],mpx2[i])
+            new_site = linalg.reshape(new_site,'ab,c,de')
+            [new_mpx[i-1],prev_site],dwt = compress(np.array(prev_site,new_site),D)
+            tot_dwt += dwt
+        new_mpx[-1] = prev_site
 
     elif mpx1[0].ndim == 3 and mpx2[0].ndim == 4:
-        for i in range(L):
-            new_site = einsum('LNR,lnNr->LlnRr',mpx1[i],mpx2[i])
-            nSh = new_site.shape
-            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1], nSh[2], -1))
+        prev_site = einsum('LNR,lNnr->LlnRr',mpx1[0],mpx2[0])
+        prev_site = linalg.reshape(prev_site,'ab,c,de')
+        for i in range(1,L):
+            new_site = einsum('LNR,lNnr->LlnRr',mpx1[i],mpx2[i])
+            new_site = linalg.reshape(new_site,'ab,c,de')
+            [new_mpx[i-1],prev_site],dwt = compress(np.array(prev_site,new_site),D)
+            tot_dwt += dwt
+        new_mpx[-1] = prev_site
             
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 4:
-        for i in range(L):
-            new_site = einsum('LNMR,lnNr->LlnMRr',mpx1[i],mpx2[i])
-            nSh = new_site.shape
-            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],nSh[2],nSh[3],-1))
+        prev_site = einsum('LNMR,lMnr->LlNnRr',mpx1[0],mpx2[0])
+        prev_site = linalg.reshape(new_site,'ab,c,de')
+        for i in range(1,L):
+            new_site = einsum('LNMR,lMnr->LlNnRr',mpx1[i],mpx2[i])
+            new_site = linalg.reshape(new_site,'ab,c,de')
+            [new_mpx[i-1],prev_site],dwt = compress(np.array(prev_site,new_site),D)
+            tot_dwt += dwt
+        new_mpx[-1] = prev_site
+
     else:
-        print('mpx of dim ', mpx2[0].ndim, ' has not yet been implemented')
-        exit()
+        raise NotImplementedError('mpx of dim', mpx2[0].ndim, 'has not yet been implemented')
 
     return new_mpx
 
