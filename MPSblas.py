@@ -258,37 +258,45 @@ def dot(mpx1,mpx2):
     return new_mpx
 
 
-def dot_compress(mpx1,mpx2,direction='left'):
+def dot_compress(mpx1,mpx2,direction=0):
     # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form, with compression of each bond
 
     L = len(mpx1)
     assert(len(mpx2)==L)
     new_mpx = np.empty(L,dtype=np.object)
 
-    if direction == 'right':
+    if not direction == 0:
         mpx1_ = [np.swapaxes(m,0,-1) for m in mpx1[::-1]]   # taking the left/right transpose
         mpx2_ = [np.swapaxes(m,0,-1) for m in mpx2[::-1]]
     else:
         mpx1_ = mpx1
         mpx2_ = mpx2
 
-    if mpx2[0].ndim == 3:
-        new_site_L = einsum('L...nR,lnr->Ll...Rr',mpx1[0],mpx2[0])
-        nSh = new_site_L.shape
-        new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],)+nSh[2:-2]+(nSh[-2]*nSh[-1]))
-        for i in xrange(L):
-            new_site = einsum('L...nR,lnr->Ll...Rr',mpx1[i],mpx2[i])
+    if mpx1[0].ndim == 3 and mpx2[0].ndim == 3:
+        return _mps_dot(mpx1, mpx2)
+    
+    elif mpx1[0].ndim == 4 and mpx2[0].ndim == 3:
+        for i in range(L):
+            new_site = einsum('LnNR,lnr->LlNRr',mpx1[i],mpx2[i])
             nSh = new_site.shape
-            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],)+nSh[2:-2]+(nSh[-2]*nSh[-1]))
-    elif mpx2[0].ndim == 4:
-        for i in xrange(L):
-            new_site = einsum('L...nR,lnmr->Ll...mRr',mpx1[i],mpx2[i])
+            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1], nSh[2], -1))
+
+    elif mpx1[0].ndim == 3 and mpx2[0].ndim == 4:
+        for i in range(L):
+            new_site = einsum('LNR,lnNr->LlnRr',mpx1[i],mpx2[i])
             nSh = new_site.shape
-            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],)+nSh[2:-2]+(nSh[-2]*nSh[-1]))
+            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1], nSh[2], -1))
+            
+    elif mpx1[0].ndim == 4 and mpx2[0].ndim == 4:
+        for i in range(L):
+            new_site = einsum('LNMR,lnNr->LlnMRr',mpx1[i],mpx2[i])
+            nSh = new_site.shape
+            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],nSh[2],nSh[3],-1))
     else:
         print('mpx of dim ', mpx2[0].ndim, ' has not yet been implemented')
+        exit()
 
-    pass
+    return new_mpx
 
 def _mps_dot(bras, kets, direction='left'):
     """
@@ -323,5 +331,5 @@ def norm(mpx):    ### would this work with an MPO? [EY]
     """
     2nd norm of a wavefunction.
     """
-    return np.sqrt(vdot(mpx.conj(), mpx))
+    return np.sqrt(_mps_dot(mpx.conj(), mpx))
 
