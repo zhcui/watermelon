@@ -195,24 +195,24 @@ def dot(direction, bras, kets):
     Dot of two wavefunction, return a scalar.
     """
         
-    L = len(bra)
-    assert(len(ket) == L)
+    L = len(bras)
+    assert(len(kets) == L)
     
     if direction == 'left':
         E = einsum('lnR, lnr -> rR', bras[0], kets[0]) 
         for i in xrange(1, N):
             # contract with bra
-            E = einsum('rR, RnL -> rnL', E, bra[i])
+            E = einsum('rR, RnL -> rnL', E, bras[i])
             # contract with ket
-            E = einsum('rnL, rnl -> lL', E, ket[i])
+            E = einsum('rnL, rnl -> lL', E, kets[i])
         E = einsum('ll', E)
     else:
         E = einsum('Lnr, lnr -> lL', bras[-1], kets[-1]) 
         for i in xrange(N - 1, -1, -1):
             # contract with bra
-            E = einsum('lL, RnL -> lnR', E, bra[i])
+            E = einsum('lL, RnL -> lnR', E, bras[i])
             # contract with ket
-            E = einsum('lnR, rnl -> rR', E, ket[i])
+            E = einsum('lnR, rnl -> rR', E, kets[i])
         E = einsum('ll', E)
     return E
 
