@@ -47,11 +47,15 @@ def create(dp, D=None, fn=np.zeros):
             
     return mpx
 
-def empty(dp, D=None):
+def empty(dp, D = None):
     return create(dp, D, fn=np.empty)
 
-def zeros(dp, D=None):
+def zeros(dp, D = None):
     return create(dp, D, fn=np.zeros)
+
+def rand(dp, D = None):
+    return create(dp, D, fn=np.random.random)
+
 
 def calc_dim(dps,D=None):
     # dps is a list/array of integers specifying the dimension of the physical bonds at each site
@@ -78,7 +82,7 @@ def asfull(mpx):
 
     n = np.prod(dp)
     dtype = mpx[0].dtype
-    if mpx[0].shape == 4: # mpx is an mpo
+    if mpx[0].ndim == 4: # mpx is an mpo
         dense = np.zeros([n, n], dtype=dtype)
         for occi in np.ndindex(dp):
             i = np.ravel_multi_index(occi, dp)
@@ -86,7 +90,7 @@ def asfull(mpx):
                 j = np.ravel_multi_index(occj, dp)
                 dense[i, j] = element(mpx, zip(occi, occj))
     else:
-        assert mpx[0].shape == 3 # mpx is an mpo        
+        assert mpx[0].ndim == 3 # mpx is an mpo        
         dense = np.zeros([n], dtype=dtype)
         for occi in np.ndindex(dp):
             i = np.ravel_multi_index(occi, dp)
@@ -224,19 +228,29 @@ def dot(mpx1,mpx2):
     # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form
     
     L = len(mpx1)
-    assert(len(mpx2)==L), '[gemv]: length of mpx1 and mpx2 are not equal'
+    assert len(mpx2)==L, '[gemv]: lengths of mpx1 and mpx2 are not equal'
     new_mpx = np.empty(L,dtype=np.object)
- 
-    if mpx2[0].ndim == 3:
-        for i in xrange(L):
-            new_site = einsum('L...nR,lnr->Ll...Rr',mpx1[i],mpx2[i])
+
+    if mpx1[0].ndim == 3 and mpx2[0].ndim == 3:
+        return _mps_dot(mpx1, mpx2)
+    
+    elif mpx1[0].ndim == 4 and mpx2[0].ndim == 3:
+        for i in range(L):
+            new_site = einsum('LnNR,lnr->LlNRr',mpx1[i],mpx2[i])
             nSh = new_site.shape
-            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],)+nSh[2:-2]+(nSh[-2]*nSh[-1]))
-    elif mpx2[0].ndim == 4:
-        for i in xrange(L):
-            new_site = einsum('L...nR,lnmr->Ll...mRr',mpx1[i],mpx2[i])
+            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1], nSh[2], -1))
+
+    elif mpx1[0].ndim == 3 and mpx2[0].ndim == 4:
+        for i in range(L):
+            new_site = einsum('LNR,lnNr->LlnRr',mpx1[i],mpx2[i])
             nSh = new_site.shape
-            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],)+nSh[2:-2]+(nSh[-2]*nSh[-1]))
+            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1], nSh[2], -1))
+            
+    elif mpx1[0].ndim == 4 and mpx2[0].ndim == 4:
+        for i in range(L):
+            new_site = einsum('LNMR,lnNr->LlnMRr',mpx1[i],mpx2[i])
+            nSh = new_site.shape
+            new_mpx[i] = new_site.reshape((nSh[0]*nSh[1],nSh[2],nSh[3],-1))
     else:
         print('mpx of dim ', mpx2[0].ndim, ' has not yet been implemented')
         exit()
@@ -276,8 +290,7 @@ def dot_compress(mpx1,mpx2,direction='left'):
 
     pass
 
-
-def vdot(bras, kets, direction='left'):
+def _mps_dot(bras, kets, direction='left'):
     """
     Dot of two wavefunction, return a scalar.
     """
