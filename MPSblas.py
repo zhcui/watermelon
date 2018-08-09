@@ -305,7 +305,8 @@ def dot(mpx1, mpx2):
             new_mpx[i] = new_site.reshape((sh[0]*sh[1],sh[2],sh[3],-1))
 
     else:
-        raise NotImplementedError, 'mpx of dim', mpx2[0].ndim, 'has not yet been implemented'
+        print 'mpx of dim', mpx2[0].ndim, 'has not yet been implemented'
+        raise NotImplementedError 
 
     return new_mpx
 
