@@ -64,10 +64,23 @@ def test_axpby():
 
     
 def test_compress():
-    dps = [4, 1, 4]
+    dps = [4, 4, 2, 3]
 
     mps1 = MPSblas.create(dps, D=5)
 
-    mps2 = MPSblas.compress(mps1, D=3)
+    mps2, dwt2 = MPSblas.compress(mps1, D=3)
+    mps3, dwt3 = MPSblas.compress(mps1, D=2)
+    mps4, dwt4 = MPSblas.compress(mps1, D=1)
+    mps5, dwt5 = MPSblas.compress(mps1, D=2, direction=1)
+    mps6, dwt6 = MPSblas.compress(mps1, D=1, direction=1)
+    print dwt2, dwt3, dwt4, dwt5, dwt6
+
+    print MPSblas.dot(mps1, mps1)
+    print MPSblas.dot(mps1, mps2)
+    print MPSblas.dot(mps1, mps3)
+    print MPSblas.dot(mps1, mps4)
+    print MPSblas.dot(mps1, mps5)
+    print MPSblas.dot(mps1, mps6)
+
     
     

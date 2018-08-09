@@ -51,6 +51,7 @@ import re
 from numpy import einsum, reshape, diag
 from pyscf import lib
 from enum import Enum
+import linalg
 
 class Arrow(Enum):
     """
@@ -171,50 +172,6 @@ def compute_sigmavector(mpo0, lopr, ropr, wfn0):
     sgv0 = einsum('rbNL, rbR -> LNR', scr2, ropr)
     return sgv0
 	
-def svd(idx, a, DMAX=0):
-    """
-    Thin Singular Value Decomposition
-
-    idx : subscripts to split 
-    a : ndarray
-        matrix to do svd.
-    DMAX: int
-        maximal dim to keep.
-     
-    Returns
-    -------
-    u : ndarray
-        left matrix
-    s : ndarray
-        singular value
-    vt : ndarray
-        right matrix
-    dwt: float
-        discarded wt
-    """
-    idx0 = re.split(",", idx)
-    assert len(idx0) == 2
-    idx0[0].replace(" ", "")
-
-    nsplit = len(idx0) 
-
-    a_shape = a.shape
-    a = reshape(a, [np.prod(a.shape[:nsplit]), -1])
-    u, s, vt = scipy.linalg.svd(a, full_matrices = False)
-    
-    M = len(s)
-    if DMAX > 0:
-        M = min(DMAX, M)
-
-    u = u[:,:M]
-    s = s[:M]
-    vt = vt[:M,:]
-
-    dwt = np.sum(s[M:])
-    
-    u = reshape(u, (a_shape[:nsplit] + (-1,)))
-    vt = reshape(vt, (a_shape[nsplit:] + (-1,)))
-    return u, s, vt, dwt
     
 
 def canonicalize(forward, wfn0, M = 0):
@@ -240,10 +197,10 @@ def canonicalize(forward, wfn0, M = 0):
     """
 
     if forward:
-        mps0, s, wfn1, dwt = svd("ij, k", wfn0, M)
+        mps0, s, wfn1, dwt = linalg.svd("ij, k", wfn0, M)
         gaug = einsum("ij, jk -> ik", diag(s), wfn1)
     else:
-        wfn1, s, mps0, dwt = svd("i, jk", wfn0, M)
+        wfn1, s, mps0, dwt = linalg.svd("i, jk", wfn0, M)
         gaug = einsum("ij, jk -> ik", wfn1, diag(s))
     return mps0, gaug
         
