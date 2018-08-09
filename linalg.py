@@ -3,7 +3,7 @@ import numpy as np
 import scipy, scipy.linalg
 
 def reshape(idx):
-    pass
+    idx0 = re.split(",", idx)
 
 def svd(idx, a, DMAX=0):
     """
