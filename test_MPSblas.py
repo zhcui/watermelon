@@ -63,7 +63,11 @@ def test_axpby():
     print MPSblas.norm(out_mps)**2
 
     
+def test_compress():
+    dps = [4, 1, 4]
 
+    mps1 = MPSblas.create(dps, D=5)
 
+    mps2 = MPSblas.compress(mps1, D=3)
     
     

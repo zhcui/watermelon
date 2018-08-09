@@ -1,5 +1,6 @@
 import numpy as np
-from numpy import einsum
+from numpy import einsum, dot, sqrt
+import linalg
 
 ### create MPS object as ndarray of ndarrays
 def create(dps,D=None):
@@ -122,40 +123,41 @@ def axpby(alpha,mpx1,beta,mpx2):
     
     return mps_new
     
-def compress(mpx, D, direction):
+def compress(mpx, D, direction=0):
     tot_dwt = 0
-    if dir == 0:
+    L = len(mpx)
+    if direction == 0:
         for i in range(L-1):
             # redistribute norm over the chain for stability
-            nrm = sqrt(dot(mpx[i], mpx[i].conj()))
+            nrm = np.linalg.norm(mpx[i])
             mpx[i] *= 1./nrm
             scal(nrm, mpx)
 
-            u, s, vt, dwt = svd("ij,k", mpx[i], D)
+            u, s, vt, dwt = linalg.svd("ij,k", mpx[i], D)
             tot_dwt += dwt
             mpx[i] = u
 
-            svt = dot(diag(s), vt)
+            svt = np.dot(np.diag(s), vt)
             mpx[i+1] = einsum("lj,jnr", svt, mpx[i+1])
 
         # redistribute norm over the chain for stability
-        nrm = sqrt(dot(mpx[i], mpx[i].conj()))
+        nrm = np.linalg.norm(mpx[i])
         mpx[i] *= 1./nrm
         scal(nrm, mpx)        
     else:
         for i in range(L-1,0,-1):
-            nrm = sqrt(dot(mpx[i], mpx[i].conj()))
+            nrm = np.linalg.norm(mpx[i])
             mpx[i] *= 1./nrm
             scal(nrm, mpx)
 
-            u, s, vt, dwt = svd("i,jk", mpx[i], D)
+            u, s, vt, dwt = linalg.svd("i,jk", mpx[i], D)
             tot_dwt += dwt
             
-            us = dot(u,diag(s))
+            us = np.dot(u,np.diag(s))
             mpx[i-1] = einsum("lnj,jr",  mpx[i-1], us)
 
         # redistribute norm over the chain for stability
-        nrm = sqrt(dot(mpx[i], mpx[i].conj()))
+        nrm = np.linalg.norm(mpx[i], mpx[i].conj())
         mpx[i] *= 1./nrm
         scal(nrm, mpx)
 
