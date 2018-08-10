@@ -530,6 +530,15 @@ def heisenberg_mpo_sparse(N, h, J):
     W.append(scr_bcoo)
     return W
 
+
+def test_eq_dense_sparse(mpxs_dense, mpxs_sparse):
+    assert(len(mpxs_dense) == len(mpxs_sparse))
+    for i in xrange(len(mpxs_dense)):
+        print i
+        assert_eq(mpxs_dense[i], mpxs_sparse[i])
+        print "ok"
+    return True
+
 def initialize_heisenberg(N, h, J, M):
     """
     Initialize the MPS, MPO, lopr and ropr.
@@ -545,9 +554,12 @@ def initialize_heisenberg(N, h, J, M):
         mpss[i - 1] = einsum("ijk, kl -> ijl", mpss[i - 1], gaug)
 
     # MPO
-    mpos = np.asarray(heisenberg_mpo_dense(N, h, J))
-    #mpos_sparse = heisenberg_mpo_sparse(N, h, J)
-   
+    mpos_dense = np.asarray(heisenberg_mpo_dense(N, h, J))
+    mpos_sparse = heisenberg_mpo_sparse(N, h, J)
+    
+    test_eq_dense_sparse(mpos_dense, mpos_sparse)
+    exit() 
+
     # lopr
     loprs = [np.array([[[1.0]]])]
     # ropr
