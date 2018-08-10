@@ -227,5 +227,29 @@ def test_dot():
     except:
         print 'error, d mismatch'
 
+    
+def test_mul():
+    dp = [1, 5, 4, 2, 4]
+    mps = MPSblas.rand(dp, 7)
+    alpha1 = np.random.random() - 0.5
+    res = MPSblas.mul(alpha1, mps)
+    mps_f = MPSblas.asfull(mps)
+    res_from_mps_f = mps_f * alpha1
+    res_f = MPSblas.asfull(res)
+    assert(np.allclose(res_f, res_from_mps_f))
+   
+    # ZHC FIXME : multiply a complex number
+    dp = [1, 2]
+    mps = MPSblas.rand(dp, 2)
+    #alpha1 = -2.0 + 7.8j
+    alpha1 = 1j
+    res = MPSblas.mul(alpha1, mps)
+    mps_f = MPSblas.asfull(mps)
+    res_from_mps_f = mps_f * alpha1
+    res_f = MPSblas.asfull(res)
+    assert(np.allclose(res_f, res_from_mps_f))
+
+
+
  
     
