@@ -65,7 +65,7 @@ class Arrow(Enum):
     LeftArrow = 0
     RightArrow = 1
 
-def compute_diagonal_elements_onesite(mpo0, lopr, ropr):
+def diag_onesite(mpo0, lopr, ropr):
     """
     Compute the diagonal elements of sandwich <L|MPO|R>,
     used as preconditioner of Davidson algorithm.
@@ -105,7 +105,7 @@ def compute_diagonal_elements_onesite(mpo0, lopr, ropr):
     # ZHC NOTE check the SDcopy of upcast options
     return diag
 
-def compute_diagonal_elements_twosite(lmpo, rmpo, lopr, ropr):
+def diag_twosite(lmpo, rmpo, lopr, ropr):
     lmpo_diag = einsum('annb -> anb', lmpo)
     rmpo_diag = einsum('bmmc -> bmc', rmpo)
     lopr = einsum('lal->la', lopr)
@@ -116,7 +116,7 @@ def compute_diagonal_elements_twosite(lmpo, rmpo, lopr, ropr):
     diag = einsum('lnmc, cr -> lnmr', scr2, ropr)
     return diag
 
-def compute_sigmavector_onesite(mpo0, lopr, ropr, wfn0):
+def dot_onesite(mpo0, lopr, ropr, wfn0):
     """
     Compute the sigma vector, i.e. sigma = H * c
     used for Davidson algorithm.
@@ -153,7 +153,7 @@ def compute_sigmavector_onesite(mpo0, lopr, ropr, wfn0):
     sgv0 = einsum('LNbr, Rbr -> LNR', scr2, ropr)
     return sgv0
 
-def compute_sigmavector_twosite(lmpo, rmpo, lopr, ropr, wfn0):
+def dot_twosite(lmpo, rmpo, lopr, ropr, wfn0):
     """
     Compute the sigma vector, i.e. sigma = H * c
     used for Davidson algorithm, in the twosite algorithm
@@ -213,7 +213,7 @@ def renormalize(forward, mpo0, opr0, bra0, ket0):
     opr0 : ndarray
         block opr.
     bra0 : ndarray
-        upper MPS.
+        upper MPS. should already be conjugated.
     ket0 : ndarray
         down MPS
      
@@ -223,7 +223,7 @@ def renormalize(forward, mpo0, opr0, bra0, ket0):
         renormalized block opr.
 
     """
-    
+ 
     if forward:
         scr = einsum('Lal, lnr -> Lanr', opr0, ket0)
         scr = einsum('Lanr, aNnb -> LNbr', scr, mpo0)
@@ -234,6 +234,24 @@ def renormalize(forward, mpo0, opr0, bra0, ket0):
         opr1 = einsum('Lanr, lnr-> Lal ', scr, ket0)
     
     return opr1    
+
+def eig_onesite(forward, mpo0, lopr, ropr, wfn0, M, tol, nroots=1):
+     diag_flat = diag_onesite(mpo0, lopr, ropr).ravel()
+     mps_shape = wfn0.shape
+     
+     def dot_flat(x):
+         return dot_onesite(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
+     def compute_precond_flat(dx, e, x0):
+         return dx / (diag_flat - e)
+
+     energy, wfn0s = lib.linalg_helper.davidson(dot_flat, wfn0.ravel(),
+                                                compute_precond_flat, tol = tol, nroots = nroots)
+
+     wfn0s = [wfn0.reshape(mps_shape) for wfn0 in wfn0s]
+
+     # implement state average ...
+     wfn0, gaug = canonicalize(forward, wfn0, M) # wfn0 becomes left/right canonical
+     return wfn0, gaug
 
 
 def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
@@ -251,7 +269,7 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
     ropr : ndarray
         right block opr.
     wfn0 : ndarray
-        MPS for canoicalization.
+        MPS for canonicalization.
     wfn1 : ndarray
         MPS.
     M : int
@@ -264,27 +282,27 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
 
     """
 
-    diag_flat = compute_diagonal_elements_onesite(mpo0, lopr, ropr).ravel()
+    diag_flat = diag_onesite(mpo0, lopr, ropr).ravel()
     
     mps_shape = wfn0.shape
-    def compute_sigma_flat(x):
-        return compute_sigmavector_onesite(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
+    def dot_flat(x):
+        return dot_onesite(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
     def compute_precond_flat(dx, e, x0):
         return dx / (diag_flat - e)
 
 
-    energy, wfn0 = lib.linalg_helper.davidson(compute_sigma_flat, wfn0.ravel(), compute_precond_flat, tol = tol)
+    energy, wfn0 = lib.linalg_helper.davidson(dot_flat, wfn0.ravel(), compute_precond_flat, tol = tol)
     wfn0 = wfn0.reshape(mps_shape)
     
     if forward:
         wfn0, gaug = canonicalize(1, wfn0, M) # wfn0 R => lmps gaug
         wfn1 = einsum("ij,jkl->ikl", gaug, wfn1)
-        lopr = renormalize(1, mpo0, lopr, wfn0, wfn0)
+        lopr = renormalize(1, mpo0, lopr, wfn0.conj(), wfn0)
         return energy, wfn0, wfn1, lopr
     else:
         wfn0, gaug = canonicalize(0, wfn0, M) # wfn0 R => lmps gaug
         wfn1 = einsum("ijk,kl->ijl", wfn1, gaug)
-        ropr = renormalize(0, mpo0, ropr, wfn0, wfn0)
+        ropr = renormalize(0, mpo0, ropr, wfn0.conj(), wfn0)
         return energy, wfn0, wfn1, ropr
 
 def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M, tol):
@@ -303,27 +321,27 @@ def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M, tol):
 
     """
     wfn2 = einsum("lnr, rms -> lnms", lwfn, rwfn)
-    diag = compute_diagonal_elements_twosite(lmpo, rmpo, lopr, ropr)
+    diag = diag_twosite(lmpo, rmpo, lopr, ropr)
 
     mps_shape = wfn2.shape
     
-    def compute_sigma_flat(x):
-        return compute_sigmavector_twosite(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
+    def dot_flat(x):
+        return dot_twosite(lmpo, rmpo, lopr, ropr, x.reshape(mps_shape)).ravel()
     def compute_precond_flat(dx, e, x0):
         return dx / (diag_flat - e)
 
-    energy, wfn0 = lib.linalg_helper.davidson(compute_sigma_flat, wfn2.ravel(), compute_precond_flat)
+    energy, wfn0 = lib.linalg_helper.davidson(dot_flat, wfn2.ravel(), compute_precond_flat)
     wfn0 = wfn0.reshape(mps_shape)
 
     if forward:
         wfn0, gaug = canonicalize(1, wfn0, M) # wfn0 R => lmps gaug
         wfn1 = einsum("ij, jkl -> ikl", gaug, wfn1)
-        lopr = renormalize(1, mpo0, lopr, wfn0, wfn0)
+        lopr = renormalize(1, mpo0, lopr, wfn0.conj(), wfn0)
         return energy, wfn0, wfn1, lopr
     else:
         wfn0, gaug = canonicalize(0, wfn0, M) # wfn0 R => lmps gaug
         wfn1 = einsum("ijk, kl -> ijl", wfn1, gaug)
-        ropr = renormalize(0, mpo0, ropr, wfn0, wfn0)
+        ropr = renormalize(0, mpo0, ropr, wfn0.conj(), wfn0)
         return energy, wfn0, wfn1, ropr
 
 
