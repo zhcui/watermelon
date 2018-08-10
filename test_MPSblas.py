@@ -100,12 +100,12 @@ def test_asfull():
 
 
     
-def test_scal():
+def test_mul():
     dps = [1, 5, 4]
     mps1 = MPSblas.rand(dps, 4)
 
     alpha = -1
-    mps2 = MPSblas.scal(alpha, mps1)
+    mps2 = MPSblas.mul(alpha, mps1)
   
     norm1 = MPSblas.norm(mps1)
     norm2 = MPSblas.norm(mps2)
