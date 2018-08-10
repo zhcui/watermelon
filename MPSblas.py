@@ -334,11 +334,11 @@ def flatten(mpx):
             mps[i] = np.reshape(mpx[i], (sh[0], sh[1]*sh[2], -1))
         return mps
 
-def dot_compress(mpx1,mpx2,D,direction=0):
+def dot_compress(mpx1_,mpx2_,D,direction=0):
     # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form, with compression of each bond
 
-    L = len(mpx1)
-    assert(len(mpx2)==L)
+    L = len(mpx1_)
+    assert(len(mpx2_)==L)
     new_mpx = np.empty(L,dtype=np.object)
     tot_dwt = 0
 
@@ -358,7 +358,8 @@ def dot_compress(mpx1,mpx2,D,direction=0):
         for i in range(1,L):
             new_site = einsum('LNnR,lnr->LlNRr',mpx1[i],mpx2[i])
             new_site = linalg.reshape(new_site,'ab,c,de')
-            [new_mpx[i-1],prev_site],dwt = compress(np.array(prev_site,new_site),D)
+            # temp_mpx, dwt = compress(np.array(prev_site,new_site,dtype=np.object),D)
+            [new_mpx[i-1],prev_site],dwt = compress(np.array((prev_site,new_site),dtype=np.object),D)
             tot_dwt += dwt
         new_mpx[-1] = prev_site
 
@@ -368,7 +369,7 @@ def dot_compress(mpx1,mpx2,D,direction=0):
         for i in range(1,L):
             new_site = einsum('LNR,lNnr->LlnRr',mpx1[i],mpx2[i])
             new_site = linalg.reshape(new_site,'ab,c,de')
-            [new_mpx[i-1],prev_site],dwt = compress(np.array(prev_site,new_site),D)
+            [new_mpx[i-1],prev_site],dwt = compress(np.array((prev_site,new_site),dtype=np.object),D)
             tot_dwt += dwt
         new_mpx[-1] = prev_site
             
@@ -378,7 +379,7 @@ def dot_compress(mpx1,mpx2,D,direction=0):
         for i in range(1,L):
             new_site = einsum('LNMR,lMnr->LlNnRr',mpx1[i],mpx2[i])
             new_site = linalg.reshape(new_site,'ab,c,de')
-            [new_mpx[i-1],prev_site],dwt = compress(np.array(prev_site,new_site),D)
+            [new_mpx[i-1],prev_site],dwt = compress(np.array((prev_site,new_site),dtype=np.object),D)
             tot_dwt += dwt
         new_mpx[-1] = prev_site
 
