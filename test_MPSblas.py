@@ -100,12 +100,12 @@ def test_asfull():
 
 
     
-def test_scal():
+def test_mul():
     dps = [1, 5, 4]
     mps1 = MPSblas.rand(dps, 4)
 
     alpha = -1
-    mps2 = MPSblas.scal(alpha, mps1)
+    mps2 = MPSblas.mul(alpha, mps1)
   
     norm1 = MPSblas.norm(mps1)
     norm2 = MPSblas.norm(mps2)
@@ -149,13 +149,13 @@ def test_axpby():
 def test_compress():
     dps = [4, 4, 2, 3]
 
-    mps1 = MPSblas.rand(dps, D=5)
+    mps1 = MPSblas.rand(dps, D = 5)
 
-    mps2, dwt2 = MPSblas.compress(mps1, D=3)
-    mps3, dwt3 = MPSblas.compress(mps1, D=2)
-    mps4, dwt4 = MPSblas.compress(mps1, D=1)
-    mps5, dwt5 = MPSblas.compress(mps1, D=2, direction=1)
-    mps6, dwt6 = MPSblas.compress(mps1, D=1, direction=1)
+    mps2, dwt2 = MPSblas.compress(mps1, D = 3)
+    mps3, dwt3 = MPSblas.compress(mps1, D = 2)
+    mps4, dwt4 = MPSblas.compress(mps1, D = 1)
+    mps5, dwt5 = MPSblas.compress(mps1, D = 2, direction = 1)
+    mps6, dwt6 = MPSblas.compress(mps1, D = 1, direction = 1)
     print dwt2, dwt3, dwt4, dwt5, dwt6
 
     print MPSblas.dot(mps1, mps1)
@@ -165,6 +165,13 @@ def test_compress():
     print MPSblas.dot(mps1, mps5)
     print MPSblas.dot(mps1, mps6)
 
+   
+def test_flatten():
+    dp = [(1,2), (5,3), (4,4)]
+    mpos = MPSblas.rand(dp, 4)
+    mps_out = MPSblas.flatten(mpos)
+    for i in xrange(len(mps_out)):
+        assert(mps_out[i].ndim == 3)
     
 def test_dot():
     dps = [1,4,4,2]
