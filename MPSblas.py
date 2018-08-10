@@ -162,9 +162,9 @@ def add(mpx1, mpx2):
         if i==0:    new_site = np.einsum('l...r->...r',new_site).reshape((1,)+sh1[1:-1]+(r1+r2,))
         if i==L-1:  new_site = np.einsum('l...r->l...',new_site).reshape((l1+l2,)+sh1[1:-1]+(1,))
 
-        new_mps[i] = new_site.copy()
+        new_mpx[i] = new_site.copy()
     
-    return new_mps
+    return new_mpx
 
 def axpby(alpha,mpx1,beta,mpx2):
     #return (alpha * mpx1) + (beta * mpx2)
@@ -334,20 +334,20 @@ def flatten(mpx):
             mps.append(np.reshape(mpx[i], (sh[0], sh[1]*sh[2], -1)))
         return np.asarray(mps)
 
-def dot_compress(mpx1_,mpx2_,D,direction=0):
+def dot_compress(mpx1,mpx2,D,direction=0):
     # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form, with compression of each bond
 
-    L = len(mpx1_)
-    assert(len(mpx2_)==L)
+    L = len(mpx1)
+    assert(len(mpx2)==L)
     new_mpx = np.empty(L,dtype=np.object)
     tot_dwt = 0
 
     if not direction == 0:
-        mpx1 = [np.swapaxes(m,0,-1) for m in mpx1_[::-1]]   # taking the left/right transpose
-        mpx2 = [np.swapaxes(m,0,-1) for m in mpx2_[::-1]]
+        mpx1 = [np.swapaxes(m,0,-1) for m in mpx1[::-1]]   # taking the left/right transpose
+        mpx2 = [np.swapaxes(m,0,-1) for m in mpx2[::-1]]
     else:
-        mpx1 = mpx1_
-        mpx2 = mpx2_
+        mpx1 = mpx1
+        mpx2 = mpx2
 
     if mpx1[0].ndim == 3 and mpx2[0].ndim == 3:
         return mps_dot(mpx1, mpx2)
@@ -358,8 +358,9 @@ def dot_compress(mpx1_,mpx2_,D,direction=0):
         for i in range(1,L):
             new_site = einsum('LNnR,lnr->LlNRr',mpx1[i],mpx2[i])
             new_site = linalg.reshape(new_site,'ab,c,de')
-            # temp_mpx, dwt = compress(np.array(prev_site,new_site,dtype=np.object),D)
-            [new_mpx[i-1],prev_site],dwt = compress(np.array((prev_site,new_site),dtype=np.object),D)
+            temp_mpx = np.empty(2,dtype=np.object)
+            temp_mpx[:] = [prev_site,new_site]
+            [new_mpx[i-1],prev_site],dwt = compress(temp_mpx,D)
             tot_dwt += dwt
         new_mpx[-1] = prev_site
 
@@ -369,24 +370,32 @@ def dot_compress(mpx1_,mpx2_,D,direction=0):
         for i in range(1,L):
             new_site = einsum('LNR,lNnr->LlnRr',mpx1[i],mpx2[i])
             new_site = linalg.reshape(new_site,'ab,c,de')
-            [new_mpx[i-1],prev_site],dwt = compress(np.array((prev_site,new_site),dtype=np.object),D)
+            temp_mpx = np.empty(2,dtype=np.object)
+            temp_mpx[:] = [prev_site,new_site]
+            [new_mpx[i-1],prev_site],dwt = compress(temp_mpx,D)
             tot_dwt += dwt
         new_mpx[-1] = prev_site
             
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 4:
         prev_site = einsum('LNMR,lMnr->LlNnRr',mpx1[0],mpx2[0])
-        prev_site = linalg.reshape(new_site,'ab,c,de')
+        prev_site = linalg.reshape(prev_site,'ab,cd,ef')
         for i in range(1,L):
             new_site = einsum('LNMR,lMnr->LlNnRr',mpx1[i],mpx2[i])
-            new_site = linalg.reshape(new_site,'ab,c,de')
-            [new_mpx[i-1],prev_site],dwt = compress(np.array((prev_site,new_site),dtype=np.object),D)
+            new_site = linalg.reshape(new_site,'ab,cd,ef')
+            temp_mpx = np.empty(2,dtype=np.object)
+            temp_mpx[:] = [prev_site,new_site]
+            shps = [m.shape for  m in temp_mpx]
+            temp_mpx = flatten(temp_mpx)
+            mpo_out,dwt = compress(temp_mpx,D)
+            new_mpx[i-1] = mpo_out[0].reshape(shps[0][:-1]+(-1,))
+            prev_site    = mpo_out[1].reshape((-1,)+shps[1][1:])
             tot_dwt += dwt
         new_mpx[-1] = prev_site
 
     else:
         raise NotImplementedError('mpx of dim', mpx2[0].ndim, 'has not yet been implemented')
 
-    return new_mpx
+    return new_mpx, tot_dwt
 
 def vdot(mps1, mps2, direction=0):
     """
@@ -420,7 +429,7 @@ def mps_dot(mps1, mps2, direction=0):
             E = einsum('lnR, rnl -> rR', E, mps2[i])
     return np.asscalar(E)
 
-def norm(mpx):    ### would this work with an MPO? [EY]
+def norm(mpx): 
     """
     2nd norm of a MPX
 
@@ -432,5 +441,8 @@ def norm(mpx):    ### would this work with an MPO? [EY]
     -------
     norm : scalar
     """
-    return np.sqrt(vdot(flatten(mpx), flatten(mpx)))
+    norm_val = vdot(flatten(mpx),flatten(mpx))
+    # catch cases when norm is ~0 but in reality is a small negative number
+    assert(norm_val > -1.0e-15), norm_val
+    return np.sqrt(np.abs(norm_val))
 

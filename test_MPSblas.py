@@ -145,6 +145,23 @@ def test_axpby():
     assert(np.allclose(out_mps_f, out_mps_f_standard))
 
 
+def test_compress2():
+    dps = [1,3,2,2]
+    mps1 = MPSblas.rand(dps)
+    
+    mps_diff1 = MPSblas.add(MPSblas.mul(-1,mps1),mps1)
+    assert not(np.isnan(MPSblas.norm(mps1))), MPSblas.norm(mps1)
+    assert MPSblas.norm(mps_diff1)<1.0e-12, MPSblas.norm(mps_diff1)
+
+    mps11 = MPSblas.add(mps1,mps1)
+    mps11,dwt = MPSblas.compress(mps11,0)
+    assert(dwt == 0), dwt
+    
+    mps_diff = MPSblas.add(MPSblas.mul(-2,mps1),mps11)
+    assert MPSblas.norm(mps_diff)<1.0e-12, MPSblas.norm(mps_diff)
+         ### sometimes nrom is on the order of 1.0e-8
+
+
     
 def test_compress():
     dps = [4, 4, 2, 3]
@@ -251,5 +268,25 @@ def test_mul():
 
 
 
+def test_dotcompress():
+    dps = [1,2,3,4,2]
+    dpo = [(d,d) for d in dps]
+    mps = MPSblas.rand(dps)
+    mpo = MPSblas.rand(dpo)
  
+    mps2 = MPSblas.dot(mpo,mps)
+    mpsc, errc = MPSblas.compress(mps2,4)
+
+    mpsdc, errdc = MPSblas.dot_compress(mpo,mps,4)
+
+    print errc, errdc, errdc-errc
+
+    diff_mps = MPSblas.add(MPSblas.mul(-1,mpsc),mpsdc)
+    assert(MPSblas.norm(diff_mps) < 1.0e-8), MPSblas.norm(diff_mps)
+
+    ### for mpo/mpo tests, need to flatten mpo before compression
+
+
+
+
     
