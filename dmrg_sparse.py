@@ -53,10 +53,12 @@ from numpy import einsum, reshape, diag
 import linalg
 import MPSblas
 from pyscf import lib
+
 import sparse
 from sparse import BCOO
 from sparse.butils import assert_eq
 from sparse.bcoo import bcalc
+import MPSblas_sparse
 
 
 
@@ -545,9 +547,19 @@ def initialize_heisenberg(N, h, J, M):
     """
     # MPS
     mpss = MPSblas.rand([2] * N, D = M, seed = 0) 
+    mpss_sparse = MPSblas_sparse.rand([2] * N, D = M, seed = 0, density = 0.5)
+    '''
+    for i in xrange(len(mpss_sparse)):
+        print "s", mpss_sparse[i].shape
+        print "bs", mpss_sparse[i].block_shape
+        #print mpss_sparse[i].data
+    exit()
+    ''' 
     normalize_factor = 1.0 / MPSblas.norm(mpss) 
     mpss = MPSblas.mul(normalize_factor, mpss) 
-  
+    
+
+
     # make MPS right canonical
     for i in xrange(N - 1, 0, -1):
         mpss[i], gaug = canonicalize(0, mpss[i], M = M)
