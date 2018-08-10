@@ -53,7 +53,9 @@ def empty(dp, D = None):
 def zeros(dp, D = None):
     return create(dp, D, fn=np.zeros)
 
-def rand(dp, D = None):
+def rand(dp, D = None, seed = None):
+    if seed is not None:
+        np.random.seed(seed)
     return create(dp, D, fn=np.random.random)
 
 
