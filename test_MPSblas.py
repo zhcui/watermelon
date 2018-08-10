@@ -100,12 +100,12 @@ def test_asfull():
 
 
     
-def test_scal():
+def test_mul():
     dps = [1, 5, 4]
     mps1 = MPSblas.rand(dps, 4)
 
     alpha = -1
-    mps2 = MPSblas.scal(alpha, mps1)
+    mps2 = MPSblas.mul(alpha, mps1)
   
     norm1 = MPSblas.norm(mps1)
     norm2 = MPSblas.norm(mps2)
@@ -165,5 +165,12 @@ def test_compress():
     print MPSblas.dot(mps1, mps5)
     print MPSblas.dot(mps1, mps6)
 
+   
+def test_flatten():
+    dp = [(1,2), (5,3), (4,4)]
+    mpos = MPSblas.rand(dp, 4)
+    mps_out = MPSblas.flatten(mpos)
+    for i in xrange(len(mps_out)):
+        assert(mps_out[i].ndim == 3)
     
-    
+

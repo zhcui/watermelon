@@ -327,11 +327,11 @@ def flatten(mpx):
     else: # MPO
         assert mpx[0].ndim == 4
         L = len(mpx)
-        mps = np.empty_like(L)
-        for i in L:
+        mps = []
+        for i in range(L):
             sh = mpx[i].shape
-            mps[i] = np.reshape(mpx[i], (sh[0], sh[1]*sh[2], -1))
-        return mps
+            mps.append(np.reshape(mpx[i], (sh[0], sh[1]*sh[2], -1)))
+        return np.asarray(mps)
 
 def dot_compress():
     pass
