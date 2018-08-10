@@ -2,8 +2,45 @@ import re
 import numpy as np
 import scipy, scipy.linalg
 
-def reshape(idx):
+def reshape(a, idx):
+    """ 
+    Reshape tensors
+    
+   
+    idx: subscripts to split according to ','
+         '...' means reshape(-1) if at the beginning/end
+               means leave untouched if in the middle
+    a:   ndarray to reshape
+    
+    Returns
+    -------
+    new_a:  reshaped ndarray
+
+    """
     idx0 = re.split(",", idx)
+    ellipse = [x == '...' for x in idx0]
+    splits  = [len(x) for x in idx0]
+    L = len(splits)
+    
+    a_sh   = a.shape
+    new_sh = []
+
+    indL = 0
+    for i in range(L):
+        indR = indL + splits[i]
+        if ellipse[i]:
+            if i==0 or i==L-1:  
+                new_sh += [-1]
+            else:
+                indR = L-np.sum(splits[i+1:])
+                new_sh += [s for s in a_sh[indL:indR]]
+        else:
+            new_sh += [np.prod(a_sh[indL:indR],dtype=np.int)]
+        indL = indR  
+    
+    return a.reshape(new_sh)
+
+
 
 def svd(idx, a, DMAX=0):
     """

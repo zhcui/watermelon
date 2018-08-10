@@ -266,6 +266,7 @@ def inprod(mps1, mpo, mps2, direction=0):
 
     return np.asscalar(E)
 
+    
 def dot(mpx1, mpx2):
     """
     Computes MPX * MPX
@@ -279,6 +280,7 @@ def dot(mpx1, mpx2):
     -------
      new_mpx : float or MPS or MPO
     """
+
     L = len(mpx1)
     assert len(mpx2)==L, '[dot]: lengths of mpx1 and mpx2 are not equal'
     new_mpx = np.empty(L, dtype=np.object)
@@ -305,7 +307,7 @@ def dot(mpx1, mpx2):
             new_mpx[i] = new_site.reshape((sh[0]*sh[1],sh[2],sh[3],-1))
 
     else:
-        raise NotImplementedError, 'mpx of dim', mpx2[0].ndim, 'has not yet been implemented'
+        raise NotImplementedError('mpx of dim', mpx2[0].ndim, 'has not yet been implemented')
 
     return new_mpx
 
@@ -326,14 +328,65 @@ def flatten(mpx):
     else: # MPO
         assert mpx[0].ndim == 4
         L = len(mpx)
-        mps = np.empty_like(L)
-        for i in L:
+        mps = []
+        for i in range(L):
             sh = mpx[i].shape
-            mps[i] = np.reshape(mpx[i], (sh[0], sh[1]*sh[2], -1))
-        return mps
+            mps.append(np.reshape(mpx[i], (sh[0], sh[1]*sh[2], -1)))
+        return np.asarray(mps)
 
-def dot_compress():
-    pass
+def dot_compress(mpx1_,mpx2_,D,direction=0):
+    # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form, with compression of each bond
+
+    L = len(mpx1_)
+    assert(len(mpx2_)==L)
+    new_mpx = np.empty(L,dtype=np.object)
+    tot_dwt = 0
+
+    if not direction == 0:
+        mpx1 = [np.swapaxes(m,0,-1) for m in mpx1_[::-1]]   # taking the left/right transpose
+        mpx2 = [np.swapaxes(m,0,-1) for m in mpx2_[::-1]]
+    else:
+        mpx1 = mpx1_
+        mpx2 = mpx2_
+
+    if mpx1[0].ndim == 3 and mpx2[0].ndim == 3:
+        return mps_dot(mpx1, mpx2)
+    
+    elif mpx1[0].ndim == 4 and mpx2[0].ndim == 3:
+        prev_site = einsum('LNnR,lnr->LlNRr',mpx1[0],mpx2[0])
+        prev_site = linalg.reshape(prev_site,'ab,c,de')
+        for i in range(1,L):
+            new_site = einsum('LNnR,lnr->LlNRr',mpx1[i],mpx2[i])
+            new_site = linalg.reshape(new_site,'ab,c,de')
+            # temp_mpx, dwt = compress(np.array(prev_site,new_site,dtype=np.object),D)
+            [new_mpx[i-1],prev_site],dwt = compress(np.array((prev_site,new_site),dtype=np.object),D)
+            tot_dwt += dwt
+        new_mpx[-1] = prev_site
+
+    elif mpx1[0].ndim == 3 and mpx2[0].ndim == 4:
+        prev_site = einsum('LNR,lNnr->LlnRr',mpx1[0],mpx2[0])
+        prev_site = linalg.reshape(prev_site,'ab,c,de')
+        for i in range(1,L):
+            new_site = einsum('LNR,lNnr->LlnRr',mpx1[i],mpx2[i])
+            new_site = linalg.reshape(new_site,'ab,c,de')
+            [new_mpx[i-1],prev_site],dwt = compress(np.array((prev_site,new_site),dtype=np.object),D)
+            tot_dwt += dwt
+        new_mpx[-1] = prev_site
+            
+    elif mpx1[0].ndim == 4 and mpx2[0].ndim == 4:
+        prev_site = einsum('LNMR,lMnr->LlNnRr',mpx1[0],mpx2[0])
+        prev_site = linalg.reshape(new_site,'ab,c,de')
+        for i in range(1,L):
+            new_site = einsum('LNMR,lMnr->LlNnRr',mpx1[i],mpx2[i])
+            new_site = linalg.reshape(new_site,'ab,c,de')
+            [new_mpx[i-1],prev_site],dwt = compress(np.array((prev_site,new_site),dtype=np.object),D)
+            tot_dwt += dwt
+        new_mpx[-1] = prev_site
+
+    else:
+        raise NotImplementedError('mpx of dim', mpx2[0].ndim, 'has not yet been implemented')
+
+    return new_mpx
 
 def vdot(mps1, mps2, direction=0):
     """
@@ -367,7 +420,7 @@ def mps_dot(mps1, mps2, direction=0):
             E = einsum('lnR, rnl -> rR', E, mps2[i])
     return np.asscalar(E)
 
-def norm(mpx):
+def norm(mpx):    ### would this work with an MPO? [EY]
     """
     2nd norm of a MPX
 
