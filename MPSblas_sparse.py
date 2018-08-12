@@ -61,10 +61,10 @@ def create(dp, D = None, fn = np.zeros, **kwargs):
     return mpx
 
 def empty(dp, D = None):
-    return create(dp, D, fn=np.empty)
+    return create(dp, D, fn = np.empty)
 
 def zeros(dp, D = None):
-    return create(dp, D, fn=np.zeros)
+    return create(dp, D, fn = np.zeros)
 
 def rand(dp, D = None, density = 1.0, seed = None):
     if seed is not None:
@@ -461,3 +461,58 @@ def norm(mpx):
     assert(norm_val > -1.0e-15), norm_val
     return np.sqrt(np.abs(norm_val))
 
+def get_connected_component(spmat, sym = True):
+    """
+    Get connected component of a BCOO matrix.
+    Assume the matrix (graph) is undirected, i.e. if spmat[i, j] has connection,
+    then spmat[j, i] also has connection.
+
+    Parameters
+    ----------
+    spmat : BCOO
+        The input matrix.
+    sym : bool
+        Indicate whether the matrix is symmetric.
+
+    Returns
+    -------
+    group_col : list
+        A collection of grouped BLOCK indices.
+
+    """
+
+    row, col = spmat.coords
+    # calculate the bsr indptr
+    indptr = np.zeros(spmat.outer_shape[0] + 1, dtype = np.int64)
+    np.cumsum(np.bincount(row, minlength = spmat.outer_shape[0]), out = indptr[1:])
+    
+    connected_vertex_col = []
+    for i in xrange(spmat.outer_shape[0]):
+        connected_vertex = col[indptr[i] : indptr[i + 1]]
+        connected_vertex_col.append(connected_vertex) 
+
+    is_grouped = np.zeros_like(row, dtype = np.bool)  
+    group_col = []
+
+    for i in xrange(spmat.outer_shape[0]):
+        if is_grouped[i]:
+            continue
+        group = []
+        stack = []
+
+        #connected_vertex = col[indptr[i] : indptr[i + 1]]
+        stack.extend(connected_vertex_col[i])
+       
+        # deep first search
+        while(len(stack) > 0):
+            vertex = stack.pop()
+            if is_grouped[vertex]:
+                continue
+            group.append(vertex)
+            is_grouped[vertex] = True
+            #connected_vertex = col[indptr[vertex] : indptr[vertex + 1]]
+            stack.extend(connected_vertex_col[vertex])
+        if group != []:
+            group_col.append(group)
+    
+    return group_col
