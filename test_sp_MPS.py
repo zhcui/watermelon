@@ -31,7 +31,7 @@ def test_product_state():
 
 def test_element():
     dp = (4, 5, 3, 3, 3)
-    mps = MPS.product_state(dp, [0, 1, 2, 2, 2], D=4, bc="pbc")
+    mps = MPS.product_state(dp, [0, 1, 2, 2, 2], D=2, bc="obc")
     smps = sMPS.from_dense(mps)
     vec = MPS.asfull(smps)
 
@@ -99,3 +99,62 @@ def test_norm():
     norm_p1 = MPS.norm(mps_pbc)
     assert np.allclose(norm_o, norm_o1)
     assert np.allclose(norm_p, norm_p1)
+
+def test_add():
+    dps = (2,2,2,2)
+    #np.random.seed(417)
+    mps_obc = sMPS.rand(dps, D=4, bc="obc")
+    mps_obc2 = sMPS.rand(dps, D=4, bc="obc")
+    mps_pbc = sMPS.rand(dps, D=4, bc="pbc")
+    mps_pbc2 = sMPS.rand(dps, D=4, bc="pbc")
+
+    print mps_obc[0]
+    print mps_obc[0].shape
+    print mps_obc[0].coords
+    print mps_obc[0].data
+    
+    assert np.allclose(np.linalg.norm(MPS.asfull(mps_obc)+MPS.asfull(mps_obc2)),
+                       MPS.norm(sMPS.add(mps_obc,mps_obc2)))
+    assert np.allclose(np.linalg.norm(MPS.asfull(mps_pbc)+MPS.asfull(mps_pbc2)),
+                       MPS.norm(sMPS.add(mps_pbc,mps_pbc2)))
+    assert np.allclose(np.linalg.norm(MPS.asfull(mps_obc)+MPS.asfull(mps_pbc2)),
+                       MPS.norm(sMPS.add(mps_obc,mps_pbc2)))
+
+def test_compress():
+    np.random.seed(417)
+    dps = [1,3,2,2]
+    mps1 = sMPS.rand(dps, D=7, bc="obc")
+
+    print [m.shape for m in mps1]
+
+    # check dimension preserving
+    mps11 = sMPS.add(mps1,mps1)
+    print "data", mps11.data
+    print "before compression", mps11[0].__class__.__name__
+    print "MPS norm"
+    print MPS.norm(mps1)
+    print MPS.norm(mps11)
+
+    
+    mps11,dwt = MPS.compress(mps11,0,preserve_dim="true")
+    mps11_,dwt = MPS.compress(mps11,0,preserve_dim="false")
+    print [m.shape for m in mps11]
+    print [m.shape for m in mps11_]
+    print [m.shape for m in mps1]
+
+    print "after compression", mps11[0].__class__.__name__
+    print MPS.norm(mps11)
+    assert(dwt == 0), dwt
+
+    
+    # mps1dense = sMPS.todense(mps1)
+    # mps_diff = MPS.add(MPS.mul(-2,mps1dense),mps11)
+    # print "---"
+    # print abs(MPS.norm(mps_diff)/MPS.norm(mps11))<1.0e-7
+    # print MPS.norm(mps_diff)
+    # print "88"
+    #mps_diff = sMPS.add(MPS.mul(-2,mps1),mps11_)
+    #print abs(MPS.norm(mps_diff)/MPS.norm(mps11_))<1.0e-7, MPS.norm(mps_diff)
+
+if __name__=="__main__":
+    test_add()

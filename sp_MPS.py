@@ -1,7 +1,7 @@
+import numpy as np
 import sparse as sp
-
+import sparse.coo
 import pbc_MPS as MPS
-MPS.dot = sparse.coo.dot
 
 
 def zeros(dp, D = None, bc = None):
@@ -9,10 +9,13 @@ def zeros(dp, D = None, bc = None):
         return sp.COO.from_numpy(np.zeros(shape))
     return MPS.create(dp, D, bc, fn=_from_np_zeros)
 
-def rand(dp, D = None, bc = None, seed = None, density = 0.1):
+def rand(dp, D = None, bc = None, seed = None, density = 0.8):
     if seed is not None:
         np.random.seed(seed)
-    return MPS.create(dp, D, bc, fn=sp.random)
+    def fn(shape):
+        return sp.random(shape, density=density)
+    #return MPS.create(dp, D, bc, fn=sp.random)
+    return MPS.create(dp, D, bc, fn=fn)
 
 def _ndarray(lst):
     L = len(lst)
@@ -51,7 +54,6 @@ def overwrite(mpx, out=None):
             m1[coord] = m2[coord]
         out[i] = m1.to_coo()
             
-
 def add(mpx1, mpx2):
     """
     Add MPX1 to MPX2
@@ -59,6 +61,9 @@ def add(mpx1, mpx2):
     Parameters
     ----------
     mpx1, mpx2 : MPS or MPO
+    bc : "obc" or "pbc"
+      if "obc" first and last tensors
+      are collapsed to shape (1,...), (...,1)
 
     Returns
     -------
@@ -67,7 +72,6 @@ def add(mpx1, mpx2):
     L = len(mpx1)
 
     new_mpx = np.empty(L, dtype=np.object)
-    dtype = np.result_type(mpx1[0], mpx2[0])
 
     assert len(mpx1)==len(mpx2), 'need to have same lengths: (%d,%d)' % (len(mpx1), len(mpx2))
     
@@ -78,26 +82,27 @@ def add(mpx1, mpx2):
 
         l1,n1,r1 = sh1[0],np.prod(sh1[1:-1]),sh1[-1]
         l2,n2,r2 = sh2[0],np.prod(sh2[1:-1]),sh2[-1]
-
+        
+        crds1 = mpx1[i].coords[:]
+        crds2 = mpx2[i].coords[:]
         if i==0:
-            new_site = np.zeros((max(l1,l2),n1,r1+r2),dtype=dtype)
-            new_site[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
-            new_site[:l2,:,r1:] = mpx2[i].reshape(l2,n2,r2)
+            crds2[-1] += r1
+            nsh = (max(l1,l2),) + sh1[1:-1] + (r1+r2,)
         elif i==L-1:
-            new_site = np.zeros((l1+l2,n1,max(r1,r2)),dtype=dtype)
-            new_site[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
-            new_site[l1:,:,:r2] = mpx2[i].reshape(l2,n2,r2)
+            crds2[0] += l1
+            nsh = (l1+l2,) + sh1[1:-1] + (max(r1,r2),)
         else:
-            new_site = np.zeros((l1+l2,n1,r1+r2),dtype=dtype)
-            new_site[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
-            new_site[l1:,:,r1:] = mpx2[i].reshape(l2,n2,r2)
+            crds2[0] += l1
+            crds2[-1] += r1
+            nsh = (l1+l2,) + sh1[1:-1] + (r1+r2,)
+            
+        new_crds = np.hstack([crds1, crds2])
+        print "data", mpx1[i].data, mpx2[i].data
+        new_data = np.hstack([mpx1[i].data, mpx2[i].data])
+        new_mpx[i] = sp.COO(new_crds, new_data, nsh)
 
-        nsh = new_site.shape
-        new_site = new_site.reshape((nsh[0],)+sh1[1:-1]+(nsh[-1],))
-        new_mpx[i] = new_site
-    
     return new_mpx
-    
+
 def compress(mpx0, D, preserve_dim=False, direction=0):
     """
     Compress MPX to dimension D
@@ -125,6 +130,7 @@ def compress(mpx0, D, preserve_dim=False, direction=0):
             mpx[i] = u
             svt = np.dot(np.diag(s), vt)
             mpx[i+1] = einsum("lj,jnr", svt, mpx[i+1])
+            #mpx[i+1] = einsum("lj,jnr", svt, mpx[i+1])
     else:
         if preserve_dim:
             preserve_uv = "v"
@@ -176,6 +182,7 @@ def inprod(mps1, mpo, mps2, direction=0):
                       E, mps1[i], mpo[i], mps2[i])
 
     return np.einsum('i...i', E)
+
 
 #####################
 def dot(mpx1, mpx2):
@@ -363,20 +370,4 @@ def _mps_dot(mps1, mps2, direction=0):
 
     return np.einsum('ijij', E)
 
-def norm(mpx): 
-    """
-    2nd norm of a MPX
-
-    Parameters
-    ----------
-    mpx : MPS or MPO
-
-    Returns
-    -------
-    norm : scalar
-    """
-    norm_val = vdot(flatten(mpx),flatten(mpx))
-    # catch cases when norm is ~0 but in reality is a small negative number
-    assert(norm_val > -1.0e-12), norm_val
-    return np.sqrt(np.abs(norm_val))
 

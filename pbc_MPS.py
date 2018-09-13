@@ -110,6 +110,7 @@ def element(mpx, occ, bc=None):
     -------
     elements: 2D ndarray (pbc) / scalar (obc)
     """
+    print occ
     mats = [None] * len(mpx)
     try: # mpx is an mpo
         if len(occ[0]) == 2:
@@ -120,8 +121,13 @@ def element(mpx, occ, bc=None):
             mats[i] = mpx[i][:,occ[i],:]
 
     element = mats[0]
+    cls = element.__class__
     for i in range(1, len(mpx)):
+        print i, element.__class__.__name__, mats[i].shape
         element = element.dot(mats[i])
+        #element = cls(element)
+    element = element.todense()
+    #exit()
     return np.einsum("i...i", element)
 
 def asfull(mpx):
@@ -225,16 +231,16 @@ def add(mpx1, mpx2):
 
         if i==0:
             new_site = np.zeros((max(l1,l2),n1,r1+r2),dtype=dtype)
-            new_site[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
-            new_site[:l2,:,r1:] = mpx2[i].reshape(l2,n2,r2)
+            new_site[:l1,:,:r1] = mpx1[i].reshape((l1,n1,r1))
+            new_site[:l2,:,r1:] = mpx2[i].reshape((l2,n2,r2))
         elif i==L-1:
             new_site = np.zeros((l1+l2,n1,max(r1,r2)),dtype=dtype)
-            new_site[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
-            new_site[l1:,:,:r2] = mpx2[i].reshape(l2,n2,r2)
+            new_site[:l1,:,:r1] = mpx1[i].reshape((l1,n1,r1))
+            new_site[l1:,:,:r2] = mpx2[i].reshape((l2,n2,r2))
         else:
             new_site = np.zeros((l1+l2,n1,r1+r2),dtype=dtype)
-            new_site[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
-            new_site[l1:,:,r1:] = mpx2[i].reshape(l2,n2,r2)
+            new_site[:l1,:,:r1] = mpx1[i].reshape((l1,n1,r1))
+            new_site[l1:,:,r1:] = mpx2[i].reshape((l2,n2,r2))
 
         nsh = new_site.shape
         new_site = new_site.reshape((nsh[0],)+sh1[1:-1]+(nsh[-1],))
@@ -337,7 +343,6 @@ def inprod(mps1, mpo, mps2, direction=0):
 
     return np.einsum('i...i', E)
 
-#####################
 def dot(mpx1, mpx2):
     """
     Computes MPX * MPX
@@ -381,6 +386,25 @@ def dot(mpx1, mpx2):
         raise NotImplementedError('mpx of dim', mpx2[0].ndim, 'has not yet been implemented')
 
     return new_mpx
+
+def norm(mpx): 
+    """
+    2nd norm of a MPX
+
+    Parameters
+    ----------
+    mpx : MPS or MPO
+
+    Returns
+    -------
+    norm : scalar
+    """
+    norm_val = vdot(flatten(mpx),flatten(mpx))
+    # catch cases when norm is ~0 but in reality is a small negative number
+    assert(norm_val > -1.0e-12), norm_val
+    return np.sqrt(np.abs(norm_val))
+
+#####################
 
 def flatten(mpx):
     """
@@ -500,7 +524,7 @@ def vdot(mps1, mps2, direction=0):
     """
     return _mps_dot(mps1.conj(), mps2, direction)
 
-def _mps_dot(mps1, mps2, direction=0):
+def _mps_dot(mps1, mps2, direction=0, trace=True):
     """
     dot of two MPS, returns scalar
     """
@@ -514,30 +538,19 @@ def _mps_dot(mps1, mps2, direction=0):
         mps1_ = mps1[::-1]
         mps2_ = mps2[::-1]
         
-    E = einsum('InR, inr -> IirR', mps1_[0], mps2_[0]) 
+    E = einsum('InR, inr -> IiRr', mps1_[0], mps2_[0]) 
+    #E = einsum('InR, inr -> IirR', mps1_[0], mps2_[0]) 
     for i in xrange(1, L):
-        print E.__class__.__name__
+        #print E.__class__.__name__
         # contract with bra
-        E = einsum('IirR, RnL -> IirnL', E, mps1_[i])
+        E = einsum('IiRr, RnL -> IirnL', E, mps1_[i])
+        #E = einsum('IirR, RnL -> IirnL', E, mps1_[i])
         # contract with ket
         E = einsum('IirnL, rnl -> IiLl', E, mps2_[i])
 
-    return np.einsum('ijij', E)
+    if trace:
+        return np.einsum('ijij', E)
+    else:
+        return E
 
-def norm(mpx): 
-    """
-    2nd norm of a MPX
-
-    Parameters
-    ----------
-    mpx : MPS or MPO
-
-    Returns
-    -------
-    norm : scalar
-    """
-    norm_val = vdot(flatten(mpx),flatten(mpx))
-    # catch cases when norm is ~0 but in reality is a small negative number
-    assert(norm_val > -1.0e-12), norm_val
-    return np.sqrt(np.abs(norm_val))
 
