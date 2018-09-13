@@ -2,7 +2,7 @@ import numpy as np
 import sparse as sp
 import sparse.coo
 import pbc_MPS as MPS
-
+from numpy import einsum
 
 def zeros(dp, D = None, bc = None):
     def _from_np_zeros(shape):
@@ -371,4 +371,41 @@ def _mps_dot(mps1, mps2, direction=0):
 
     return np.einsum('ijij', E)
 
+
+def mul(alpha, mpss):
+    # result:  mps scaled by alpha
+
+    L = len(mpss)
+    new_mpss = np.empty(L, dtype=np.object)
+
+    const = np.abs(alpha) ** (1. / L)
+    dtype = np.result_type(alpha, mpss[0])
+    for i in range(L):
+        new_mpss[i] = mpss[i] * const
+
+    # change sign as specified by alpha
+    try:     phase = np.sign(alpha)
+    except:  phase = np.exp(1j * np.angle(alpha))
+
+    new_mpss[0] *= phase
+
+    return new_mpss
+
+
+def norm(mpx): 
+    """
+    2nd norm of a MPX
+
+    Parameters
+    ----------
+    mpx : MPS or MPO
+
+    Returns
+    -------
+    norm : scalar
+    """
+    norm_val = vdot(flatten(mpx),flatten(mpx))
+    # catch cases when norm is ~0 but in reality is a small negative number
+    assert(norm_val > -1.0e-15), norm_val
+    return np.sqrt(np.abs(norm_val))
 
