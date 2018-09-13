@@ -380,7 +380,7 @@ def mul(alpha, mpss):
     const = np.abs(alpha) ** (1. / L)
     dtype = np.result_type(alpha, mpss[0])
     for i in range(L):
-        new_mpss[i] = np.array(mpss[i], dtype=dtype) * const
+        new_mpss[i] = mpss[i] * const
 
     # change sign as specified by alpha
     try:     phase = np.sign(alpha)
