@@ -4,16 +4,43 @@ import gMPX
 """
 MPX with dense tensors
 """  
-def empty(dp, D = None, bc = None):
-    return gMPX.create(dp, D, bc, fn=np.empty)
+def empty(dp, D = None, bc = None, dtype=np.float64):
+    return gMPX.create(dp, D, bc, fn=np.empty, dtype=dtype)
 
-def zeros(dp, D = None, bc = None):
-    return gMPX.create(dp, D, bc, fn=np.zeros)
+def zeros(dp, D = None, bc = None, dtype=np.float64):
+    return gMPX.create(dp, D, bc, fn=np.zeros, dtype=dtype)
 
-def rand(dp, D = None, bc = None, seed = None):
+def rand(dp, D = None, bc = None, seed = None, dtype=np.float64):
+    if dtype != np.float64:
+        raise NotImplementedError
+
     if seed is not None:
         np.random.seed(seed)
-    return gMPX.create(dp, D, bc, fn=np.random.random)
+    def fn(a, dtype):
+        return np.array(np.random.random(a), dtype=dtype)
+    return gMPX.create(dp, D, bc, fn=fn, dtype=dtype)
+
+def product_state(dp, occ, D=None, bc=None):
+    """
+    Parameters
+    ----------
+    dp : sequence of int
+      Physical dimension of MPX
+    D : int 
+      max bond (matrices contain one non-zero element)
+    occ : sequence of int (MPS) / tuple[2] (MPO)
+      non-zero physical index in state
+    
+    Returns
+    -------
+    mps : MPS product state according to occ
+    """
+    L = len(dp)
+    mps = zeros(dp, D, bc)
+    for i in range(L):
+        mps[i][0, occ[i], 0] = 1.
+
+    return mps
 
 def add(mpx1, mpx2):
     """

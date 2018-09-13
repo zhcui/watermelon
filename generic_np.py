@@ -1,4 +1,6 @@
 import numpy as np
+import sparse
+import sparse.coo
 import numpy_helper
 import sparse_helper
 
@@ -45,14 +47,14 @@ def dot(a, b):
     else:
         return np.dot(a, b)
     
-def einsum(a, b):
-    if isinstance(a, sparse.coo.COO) or isinstance(b, sparse.coo.COO):
-        return sparse_helper.einsum(a, b)
+def einsum(idx, *tensors, **kwargs):
+    if any(isinstance(a, sparse.coo.COO) for a in tensors):
+        return sparse_helper.einsum(idx, *tensors)
     else:
-        return np.einsum(a, b)
+        return np.einsum(idx, *tensors, **kwargs)
 
 def diag(a):
-    if isinstance(a, sparse_coo.COO):
+    if isinstance(a, sparse.coo.COO):
         return sparse_helper.diag(a)
     else:
         return np.diag(a)

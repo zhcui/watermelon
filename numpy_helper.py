@@ -1,5 +1,7 @@
 import re
 import numpy as np
+import scipy
+import scipy.linalg
 
 def svd(idx, a, D=0, preserve_uv=None):
     idx0 = re.split(",", idx)

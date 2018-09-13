@@ -1,18 +1,26 @@
+import re
 import numpy
 np = numpy
+import scipy
+import scipy.sparse
+import scipy.sparse.linalg
 import sparse
+import sparse.coo
+COO = sparse.coo.COO
 
 def diag(a):
     """
     Perform equivalent of :obj:`numpy.diag`.
     """
-    if len(a.shape == 2):
+    if len(a.shape) == 2:
         return a.to_scipy_sparse().diagonal()
-    else:
+    elif len(a.shape) == 1:
         shape = (a.shape[0], a.shape[0])
-        return sparse.COO(coords = np.vstack([coords, coords]),
+        return sparse.COO(coords = np.vstack([a.coords, a.coords]),
                           data = a.data,
                           shape = shape)
+    else:
+        raise RuntimeError
 
 def tensordot(a, b, axes=2):
     # taken from sparse.coo
@@ -39,7 +47,6 @@ def tensordot(a, b, axes=2):
     """
     # Much of this is stolen from numpy/core/numeric.py::tensordot
     # Please see license at https://github.com/numpy/numpy/blob/master/LICENSE.txt
-    from .core import COO
 
     try:
         iter(axes)
@@ -139,7 +146,7 @@ def dot(a, b):
         return (a * b).sum()
 
     a_axis = -1
-    b_axis = -2
+    b_axis = -2 # fixed this??
 
     if b.ndim == 1:
         b_axis = -1
@@ -149,7 +156,6 @@ def dot(a, b):
 
 def _dot(a, b):
     # unchanged from sparse.coo
-    from .core import COO
 
     if isinstance(b, COO) and not isinstance(a, COO):
         return _dot(b.T, a.T).T
@@ -176,7 +182,6 @@ def einsum(idx_str, *tensors, **kwargs):
     indices  = "".join(re.split(',|->',idx_str))
     if '->' not in idx_str or any(indices.count(x)>2 for x in set(indices)):
         return numpy.einsum(idx_str,*tensors)
-
     if idx_str.count(',') > 1:
         indices  = re.split(',|->',idx_str)
         indices_in = indices[:-1]
@@ -206,10 +211,10 @@ def einsum(idx_str, *tensors, **kwargs):
 
     A, B = tensors
     # Call numpy.asarray because A or B may be HDF5 Datasets 
-    A = numpy.asarray(A, order='A')
-    B = numpy.asarray(B, order='A')
-    if A.size < 2000 or B.size < 2000:
-        return numpy.einsum(idx_str, *tensors)
+    # A = numpy.asarray(A, order='A')
+    # B = numpy.asarray(B, order='A')
+    # if A.size < 2000 or B.size < 2000:
+    #     return numpy.einsum(idx_str, *tensors)
 
     # Split the strings into a list of idx char's
     idxA, idxBC = idx_str.split(',')
@@ -301,14 +306,15 @@ def einsum(idx_str, *tensors, **kwargs):
     Bt = B.transpose(new_orderB)
 
     # if At.flags.f_contiguous:
-    #     At = numpy.asarray(At.reshape(-1,inner_shape), order='F')
+    At = At.reshape((-1,inner_shape))
     # else:
     #     At = numpy.asarray(At.reshape(-1,inner_shape), order='C')
     # if Bt.flags.f_contiguous:
-    #     Bt = numpy.asarray(Bt.reshape(inner_shape,-1), order='F')
+    Bt = Bt.reshape((inner_shape,-1))
     # else:
     #     Bt = numpy.asarray(Bt.reshape(inner_shape,-1), order='C')
-    return dot(At,Bt).reshape(shapeCt).transpose(new_orderCt)
+    result = dot(At,Bt).reshape(shapeCt).transpose(new_orderCt)
+    return result
 
 def svd(idx, a, D=0, preserve_uv=None):
     idx0 = re.split(",", idx)
@@ -318,28 +324,75 @@ def svd(idx, a, D=0, preserve_uv=None):
     nsplit = len(idx0[0]) 
 
     a_shape = a.shape
-    a = np.reshape(a, [np.prod(a.shape[:nsplit]), -1])
+    a = a.reshape([np.prod(a.shape[:nsplit]), -1])
 
-    u, s, vt = scipy.sparse.linalg.svds(a.to_scipy_sparse())
+    M = min(a.shape[0], a.shape[1])
+    if D > 0:
+        M = min(D, M)
 
-    if preserve_uv == "u":
-        ubig = sparse.coo.COO(coords = u.coords, data = u.data,
-                              shape = a.shape)
-        sbig = sparse.coo.COO(coords = s.coords, data = s.data,
-                              shape = (a.shape[1],))
-        vtbig = sparse.coo.COO(coords = vt.coords, data = vt.data,
-                               shape = (a.shape[1], a.shape[1]))
-        u, s, vt = ubig, sbig, vtbig 
-    elif preserve_uv == "v":
-        vtbig = sparse.coo.COO(coords = v.coords, data = v.data,
-                               shape = a.shape)
-        sbig = sparse.coo.COO(coords = s.coords, data = s.data,
-                              shape = (a.shape[0],))
-        ubig = sparse.coo.COO(coords = u.coords, data = u.data,
-                              shape = (a.shape[0], a.shape[0]))
-        u, s, vt = ubig, sbig, vtbig 
-            
-    u = np.reshape(u, (a_shape[:nsplit] + (-1,)))
-    vt = np.reshape(vt, ((-1,) + a_shape[nsplit:]))
+    # Arnoldi based, special M==N exception
+    if M == min(a.shape[0], a.shape[1]):
+        print "Using Dense SVD"
+        u, s, vt = scipy.linalg.svd(a.todense(), full_matrices=False)
+    else:
+        print "Using Sparse SVD"
+        u, s, vt = scipy.sparse.linalg.svds(a.to_scipy_sparse(), M)
 
+    # print "Singular values are", s
+    # print u.shape
+    # print s.shape
+    # print vt.shape
+    u = sparse.coo.COO.from_numpy(u)
+    s = sparse.coo.COO.from_numpy(s)
+    vt = sparse.coo.COO.from_numpy(vt)
+
+    dwt = None
+
+    # Need to debug this stuff below
+    # if preserve_uv == "u":
+    #     ubig = sparse.coo.COO(coords = u.coords, data = u.data,
+    #                           shape = a.shape)
+    #     sbig = sparse.coo.COO(coords = s.coords, data = s.data,
+    #                           shape = (a.shape[1],))
+    #     vtbig = sparse.coo.COO(coords = vt.coords, data = vt.data,
+    #                            shape = (a.shape[1], a.shape[1]))
+    #     u, s, vt = ubig, sbig, vtbig 
+    # elif preserve_uv == "v":
+    #     vtbig = sparse.coo.COO(coords = v.coords, data = v.data,
+    #                            shape = a.shape)
+    #     sbig = sparse.coo.COO(coords = s.coords, data = s.data,
+    #                           shape = (a.shape[0],))
+    #     ubig = sparse.coo.COO(coords = u.coords, data = u.data,
+    #                           shape = (a.shape[0], a.shape[0]))
+    #     u, s, vt = ubig, sbig, vtbig 
+
+    # np.set_printoptions(precision=3)
+    # print "ortho"
+    # ud = u.todense()
+    # vtd = vt.todense()
+    # u1 = np.dot(u.todense().T, u.todense())
+    # vt1= np.dot(vt.todense(), vt.todense().T)
+
+    # print u1
+    # print vt1
+    # print "deviations from 1"
+    # print np.linalg.norm(u1-np.eye(ud.shape[1]))
+    # print np.linalg.norm(vt1-np.eye(vtd.shape[0]))
+    
+    u = u.reshape((a_shape[:nsplit] + (-1,)))
+    vt = vt.reshape(((-1,) + a_shape[nsplit:]))
+
+    # print "all my stuff"
+    # print u
+    # print s
+    # print "----------"
+    # print u.todense(), u.shape
+    # print s.todense(), s.shape
+    # print vt.todense(), vt.shape
+    # print np.dot(u.todense(), np.dot(np.diag(s.todense()), vt.todense()))
+    # print a.todense()
+    # print "----------"
     return u, s, vt, dwt
+
+def _svd():
+    pass

@@ -1,14 +1,15 @@
 import numpy as np
-
+import generic_np
 _einsum = generic_np.einsum
 _dot = generic_np.dot
+_diag = generic_np.diag
 _svd = generic_np.svd
 _sqrt = np.sqrt
 
 """
 Generic MPX functions
 """
-def create(dp, D=None, bc = None, fn=None):
+def create(dp, D=None, bc = None, fn=None, dtype=None):
     # TODO: currently if D!=None and pbc, guarantees
     # all bond dims are D; but if obc, then
     # always follows obc_dim. Add option for guaranteed
@@ -41,14 +42,14 @@ def create(dp, D=None, bc = None, fn=None):
 
     # fill in MPX with arrays of the correct shape
     if bc == "obc":
-        mpx[0]  = fn((1, _dp[0], dim_rs[0]))
+        mpx[0]  = fn((1, _dp[0], dim_rs[0]), dtype=dtype)
         for i in range(1, L-1):
-            mpx[i] = fn((dim_rs[i-1], _dp[i], dim_rs[i]))
-        mpx[-1] = fn((dim_rs[-1], _dp[-1], 1))
+            mpx[i] = fn((dim_rs[i-1], _dp[i], dim_rs[i]), dtype=dtype)
+        mpx[-1] = fn((dim_rs[-1], _dp[-1], 1), dtype=dtype)
 
     elif bc == "pbc":
         for i in range(L):
-            mpx[i] = fn((D, _dp[i], D))
+            mpx[i] = fn((D, _dp[i], D), dtype=dtype)
     else:
         raise RuntimeError, "bc not specified"
     
@@ -139,28 +140,6 @@ def asfull(mpx):
             
     return dense
 
-def product_state(dp, occ, D=None, bc=None):
-    """
-    Parameters
-    ----------
-    dp : sequence of int
-      Physical dimension of MPX
-    D : int 
-      max bond (matrices contain one non-zero element)
-    occ : sequence of int (MPS) / tuple[2] (MPO)
-      non-zero physical index in state
-    
-    Returns
-    -------
-    mps : MPS product state according to occ
-    """
-    L = len(dp)
-    mps = zeros(dp, D, bc)
-    for i in range(L):
-        mps[i][0, occ[i], 0] = 1.
-
-    return mps
-
 def mul(alpha, mpx):
     """
     Scale MPX by alpha
@@ -207,21 +186,21 @@ def compress(mpx0, D, preserve_dim=False, direction=0):
             preserve_uv = "u"
         for i in range(L-1):
             u, s, vt, dwt = _svd("ij,k", mpx[i], D, preserve_uv)
-            tot_dwt += dwt
+            #tot_dwt += dwt
             mpx[i] = u
             svt = _dot(_diag(s), vt)
-            mpx[i+1] = _einsum("lj,jnr", svt, mpx[i+1])
+            mpx[i+1] = _einsum("lj,jnr->lnr", svt, mpx[i+1])
     else:
         if preserve_dim:
             preserve_uv = "v"
         for i in range(L-1,0,-1):
             u, s, vt, dwt = _svd("i,jk", mpx[i], D, preserve_uv)
-            tot_dwt += dwt
+            #tot_dwt += dwt
             mpx[i] = vt
             us = _dot(u, _diag(s))
-            mpx[i-1] = _einsum("lnj,jr",  mpx[i-1], us)
+            mpx[i-1] = _einsum("lnj,jr->lnr",  mpx[i-1], us)
 
-    return mpx, tot_dwt
+    return mpx
 
 def dot(mpx1, mpx2):
     """

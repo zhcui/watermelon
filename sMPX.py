@@ -1,22 +1,27 @@
 import numpy as np
 import sparse as sp
 import sparse.coo
-import gMPS 
+import gMPX as MPX
 
 """
 Sparse MPX functions
 """
-def zeros(dp, D = None, bc = None):
-    def _from_np_zeros(shape):
-        return sp.COO.from_numpy(np.zeros(shape))
-    return gMPS.create(dp, D, bc, fn=_from_np_zeros)
+def zeros(dp, D = None, bc = None, dtype = np.float64):
+    def _from_np_zeros(shape, dtype):
+        return sp.COO.from_numpy(np.zeros(shape, dtype))
+    return MPX.create(dp, D, bc, fn=_from_np_zeros)
 
-def rand(dp, D = None, bc = None, seed = None, density = 0.8):
+def rand(dp, D = None, bc = None, seed = None, density = 0.8, dtype=np.float64):
+    # random float, upcast to dtype
     if seed is not None:
         np.random.seed(seed)
-    def fn(shape):
+    def fn(shape, dtype):
         return sp.random(shape, density=density)
-    return gMPS.create(dp, D, bc, fn=fn)
+
+    if dtype != np.float64:
+        raise NotImplementedError
+    
+    return MPX.create(dp, D, bc, fn=fn, dtype=None)
 
 def _ndarray(lst):
     L = len(lst)
