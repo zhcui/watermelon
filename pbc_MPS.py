@@ -1,9 +1,16 @@
 import numpy as np
 
-from numpy import einsum, dot, sqrt
+einsum = np.einsum
+dot = np.dot
+sqrt = np.sqrt
+
 import linalg
 
-def create(dp, D=None, fn=np.zeros):
+def create(dp, D=None, bc = None, fn=np.zeros):
+    # TODO: currently if D!=None and pbc, guarantees
+    # all bond dims are D; but if obc, then
+    # always follows obc_dim. Add option for guaranteed
+    # bond dim D even for OBC
     """
     Create random MPX object as ndarray of ndarrays
 
@@ -28,14 +35,21 @@ def create(dp, D=None, fn=np.zeros):
         _dp = dp
         
     # calculate right bond dims of each tensor
-    dim_rs = calc_dim(_dp,D)
+    dim_rs = obc_dim(_dp, D)
 
-    # fill in MPX with random arrays of the correct shape
-    mpx[0]  = fn((1, _dp[0], dim_rs[0]))
-    for i in range(1, L-1):
-        mpx[i] = fn((dim_rs[i-1], _dp[i], dim_rs[i]))
-    mpx[-1] = fn((dim_rs[-1], _dp[-1], 1))
+    # fill in MPX with arrays of the correct shape
+    if bc == "obc":
+        mpx[0]  = fn((1, _dp[0], dim_rs[0]))
+        for i in range(1, L-1):
+            mpx[i] = fn((dim_rs[i-1], _dp[i], dim_rs[i]))
+        mpx[-1] = fn((dim_rs[-1], _dp[-1], 1))
 
+    elif bc == "pbc":
+        for i in range(L):
+            mpx[i] = fn((D, _dp[i], D))
+    else:
+        raise RuntimeError, "bc not specified"
+    
     try: # if MPO: reshape flattened phys. dim.
         if len(dp[0]) == 2: 
             for i in range(L):
@@ -47,33 +61,55 @@ def create(dp, D=None, fn=np.zeros):
             
     return mpx
 
-def empty(dp, D = None):
-    return create(dp, D, fn=np.empty)
+def empty(dp, D = None, bc = None):
+    return create(dp, D, bc, fn=np.empty)
 
-def zeros(dp, D = None):
-    return create(dp, D, fn=np.zeros)
+def zeros(dp, D = None, bc = None):
+    return create(dp, D, bc, fn=np.zeros)
 
-def rand(dp, D = None, seed = None):
+def rand(dp, D = None, bc = None, seed = None):
     if seed is not None:
         np.random.seed(seed)
-    return create(dp, D, fn=np.random.random)
+    return create(dp, D, bc, fn=np.random.random)
 
+def obc_dim(dp, D=None):
+    """
+    Right bond dimensions for OBC MPX
 
-def calc_dim(dps,D=None):
-    # dps is a list/array of integers specifying the dimension of the physical bonds at each site
-    # cap MPS to virtual dimension D
-    # returns a list of the the right bond dimensions to be used in generating the MPS
+    Parameters
+    ----------
+    dp : sequence of int
+      Physical dimension of MPX
+    D  : int, max bond dimension
 
-    dimR = np.cumprod(dps)
-    dimL = np.cumprod(dps[::-1])[::-1]
+    Returns
+    -------
+    dimMin : list of int, right bond dimensions
+    """
+    dimR = np.cumprod(dp)
+    dimL = np.cumprod(dp[::-1])[::-1]
     
     dimMin = np.minimum(dimR[:-1],dimL[1:])
     if D is not None:
-        dimMin = np.minimum(dimMin,[D]*(len(dps)-1))
+        dimMin = np.minimum(dimMin,[D]*(len(dp)-1))
 
     return dimMin
 
-def element(mpx, occ):
+def element(mpx, occ, bc=None):
+    """
+    Evaluate MPX for specified physical indices
+
+    Parameters
+    ----------
+    dp : sequence of int
+      Physical dimension of MPX
+    occ : sequence of int (MPS) / tuple[2] (MPO)
+      Physical index
+
+    Returns
+    -------
+    elements: 2D ndarray (pbc) / scalar (obc)
+    """
     mats = [None] * len(mpx)
     try: # mpx is an mpo
         if len(occ[0]) == 2:
@@ -82,11 +118,17 @@ def element(mpx, occ):
     except:
         for i, m in enumerate(mpx):
             mats[i] = mpx[i][:,occ[i],:]
-        
-    return np.asscalar(reduce(np.dot, mats))
+
+    element = mats[0]
+    for i in range(1, len(mpx)):
+        element = element.dot(mats[i])
+    return np.einsum("i...i", element)
 
 def asfull(mpx):
-    dp = tuple(m.shape[1] for m in mpx)
+    """
+    Return full Hilbert space representation
+    """
+    dp = tuple([m.shape[1] for m in mpx])
 
     n = np.prod(dp)
     dtype = mpx[0].dtype
@@ -98,138 +140,165 @@ def asfull(mpx):
                 j = np.ravel_multi_index(occj, dp)
                 dense[i, j] = element(mpx, zip(occi, occj))
     else:
-        assert mpx[0].ndim == 3 # mpx is an mpo        
-        dense = np.zeros([n], dtype=dtype)
+        assert mpx[0].ndim == 3 # mpx is an mpo
+        dense = np.zeros([n], dtype=dtype)        
         for occi in np.ndindex(dp):
             i = np.ravel_multi_index(occi, dp)
             dense[i] = element(mpx, occi)
+            
     return dense
 
-
-def product_state(dp, occ):
-    # dp:  list/array of integers specifying dimension of physical bonds at each site
-    # occ:  occupancy vector (len L), numbers specifying physical bond index occupied
-    # returns product state mps according to occ
+def product_state(dp, occ, D=None, bc=None):
+    """
+    Parameters
+    ----------
+    dp : sequence of int
+      Physical dimension of MPX
+    D : int 
+      max bond (matrices contain one non-zero element)
+    occ : sequence of int (MPS) / tuple[2] (MPO)
+      non-zero physical index in state
+    
+    Returns
+    -------
+    mps : MPS product state according to occ
+    """
     L = len(dp)
-    mps = zeros(dp, 1)
+    mps = zeros(dp, D, bc)
     for i in range(L):
         mps[i][0, occ[i], 0] = 1.
 
     return mps
 
+def mul(alpha, mpx):
+    """
+    Scale MPX by alpha
 
-def mul(alpha, mps):
-    # result:  mps scaled by alpha
-
-    L = len(mps)
-    new_mps = np.empty(L,dtype=np.object)
+    Returns
+    -------
+    new_mpx : scaled MPX
+    """
+    L = len(mpx)
+    new_mpx = np.empty(L,dtype=np.object)
 
     const = np.abs(alpha)**(1./L)
-    dtype = np.result_type(alpha,mps[0])
+    dtype = np.result_type(alpha,mpx[0])
     for i in range(L):
-        new_mps[i] = np.array(mps[i],dtype=dtype)*const
+        new_mpx[i] = mpx[i] * const
+        #new_mpx[i] = np.array(mpx[i],dtype=dtype)
 
-    # change sign as specified by alpha
-    try:     phase = np.sign(alpha)
-    except:  phase = np.exp(1j*np.angle(alpha))
+    # restore phase on first tensor
+    new_mpx[0] *= (alpha/np.abs(alpha))
+    #new_mpx[0] *= (alpha)
 
-    new_mps[0] *= phase
-
-    return new_mps
-
+    return new_mpx
 
 def add(mpx1, mpx2):
+    """
+    Add MPX1 to MPX2
+
+    Parameters
+    ----------
+    mpx1, mpx2 : MPS or MPO
+    bc : "obc" or "pbc"
+      if "obc" first and last tensors
+      are collapsed to shape (1,...), (...,1)
+
+    Returns
+    -------
+    new_mpx : sum of MPS
+    """
     L = len(mpx1)
 
     new_mpx = np.empty(L, dtype=np.object)
-
     dtype = np.result_type(mpx1[0], mpx2[0])
 
-    assert len(mpx1)==len(mpx2), 'need to have same lengths: (%d,%d)'%(len(mpx1),len(mpx2))
-
+    assert len(mpx1)==len(mpx2), 'need to have same lengths: (%d,%d)' % (len(mpx1), len(mpx2))
+    
     for i in range(L):
         sh1 = mpx1[i].shape
         sh2 = mpx2[i].shape
-        assert sh1[1:-1]==sh2[1:-1], 'need physical bonds at site %d to match'%(i)        
+        assert sh1[1: -1] == sh2[1: -1], 'need physical bonds at site %d to match' % (i)        
 
         l1,n1,r1 = sh1[0],np.prod(sh1[1:-1]),sh1[-1]
         l2,n2,r2 = sh2[0],np.prod(sh2[1:-1]),sh2[-1]
 
-        new_site = np.zeros((l1+l2,n1,r1+r2),dtype=dtype)
-        new_site[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
-        new_site[l1:,:,r1:] = mpx2[i].reshape(l2,n2,r2)
+        if i==0:
+            new_site = np.zeros((max(l1,l2),n1,r1+r2),dtype=dtype)
+            new_site[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
+            new_site[:l2,:,r1:] = mpx2[i].reshape(l2,n2,r2)
+        elif i==L-1:
+            new_site = np.zeros((l1+l2,n1,max(r1,r2)),dtype=dtype)
+            new_site[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
+            new_site[l1:,:,:r2] = mpx2[i].reshape(l2,n2,r2)
+        else:
+            new_site = np.zeros((l1+l2,n1,r1+r2),dtype=dtype)
+            new_site[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)
+            new_site[l1:,:,r1:] = mpx2[i].reshape(l2,n2,r2)
 
-        new_site = new_site.reshape((l1+l2,)+sh1[1:-1]+(r1+r2,))
-
-        if i==0:    new_site = np.einsum('l...r->...r',new_site).reshape((1,)+sh1[1:-1]+(r1+r2,))
-        if i==L-1:  new_site = np.einsum('l...r->l...',new_site).reshape((l1+l2,)+sh1[1:-1]+(1,))
-
-        new_mpx[i] = new_site.copy()
+        nsh = new_site.shape
+        new_site = new_site.reshape((nsh[0],)+sh1[1:-1]+(nsh[-1],))
+        new_mpx[i] = new_site
     
     return new_mpx
-
-def axpby(alpha,mpx1,beta,mpx2):
-    #return (alpha * mpx1) + (beta * mpx2)
-    # GKC: reimplement in terms of add and mul
-    # alpha = scalar, mps1,mps2 are ndarrays of tensors   
-    # returns alpha*mps1 + mps2
-
-    L = len(mpx1)
-    mps_new = np.empty(L,dtype=np.object)
     
-    const_a = np.abs(alpha)**(1./L)
-    const_b = np.abs(beta)**(1./L)
-    dtype = np.result_type(alpha,mpx1[0],beta,mpx2[0])
-    assert(len(mpx1)==len(mpx2)), 'need to have same lengths: (%d,%d)'%(len(mpx1),len(mpx2))
-    for i in range(len(mpx1)):
-        sh1 = mpx1[i].shape
-        sh2 = mpx2[i].shape
-        assert(sh1[1:-1]==sh2[1:-1]), 'need physical bonds at site %d to match'%(i)        
+def compress(mpx0, D, preserve_dim=False, direction=0):
+    """
+    Compress MPX to dimension D
 
-        l1,n1,r1 = sh1[0],np.prod(sh1[1:-1]),sh1[-1]
-        l2,n2,r2 = sh2[0],np.prod(sh2[1:-1]),sh2[-1]
-
-        if i==0: 
-            try:         sign_a, sign_b = np.sign(alpha,beta)
-            except:      sign_a, sign_b = np.exp(1j*np.angle(alpha)), np.exp(1j*np.angle(beta))
-        else:
-            sign_a, sign_b = 1,1
-
-        newSite = np.zeros((l1+l2,n1,r1+r2),dtype=dtype)
-        newSite[:l1,:,:r1] = mpx1[i].reshape(l1,n1,r1)*const_a*sign_a
-        newSite[l1:,:,r1:] = mpx2[i].reshape(l2,n2,r2)*const_b*sign_b
-
-        newSite = newSite.reshape((l1+l2,)+sh1[1:-1]+(r1+r2,))
-
-        if i==0:    newSite = np.einsum('l...r->...r',newSite).reshape((1,)+sh1[1:-1]+(r1+r2,))
-        if i==L-1:  newSite = np.einsum('l...r->l...',newSite).reshape((l1+l2,)+sh1[1:-1]+(1,))
-
-        mps_new[i] = newSite.copy()
-    
-    return mps_new
-    
-def compress(mpx0, D, direction=0):
+    Parameters
+    ----------
+    mpx0 : MPS or MPO
+    D : int
+      max dimension to compress to
+    preserve_dim : bool
+      if True, then the dimensions of the mpx tensors
+      are unchanged; truncation sets elements to zero
+    """
     tot_dwt = 0
     L = len(mpx0)
 
     mpx = mpx0.copy()
-    
+    preserve_uv = None
     if direction == 0:
+        if preserve_dim:
+            preserve_uv = "u"
         for i in range(L-1):
-            u, s, vt, dwt = linalg.svd("ij,k", mpx[i], D)
+            u, s, vt, dwt = linalg.svd("ij,k", mpx[i], D, preserve_uv)
             tot_dwt += dwt
             mpx[i] = u
             svt = np.dot(np.diag(s), vt)
             mpx[i+1] = einsum("lj,jnr", svt, mpx[i+1])
     else:
+        if preserve_dim:
+            preserve_uv = "v"
         for i in range(L-1,0,-1):
-            u, s, vt, dwt = linalg.svd("i,jk", mpx[i], D)
+            u, s, vt, dwt = linalg.svd("i,jk", mpx[i], D, preserve_uv)
             tot_dwt += dwt
             mpx[i] = vt
             us = np.dot(u,np.diag(s))
             mpx[i-1] = einsum("lnj,jr",  mpx[i-1], us)
 
     return mpx, tot_dwt
+
+def overwrite(mpx, out=None):
+    """
+    Overwrites tensors of mpx2 with tensors of mpx1,
+    with fixed shape of mpx2 tensors.
+
+    Parameters
+    ----------
+    mpx : MPX (source)
+    out : MPX (target) [modified]
+    """
+    for m1, m2 in zip(out, mpx):
+        if len(m2.shape) == 3:
+            m1[:m2.shape[0],:m2.shape[1],:m2.shape[2]] = m2[:,:,:]
+        else:
+            assert len(m2.shape) == 4
+            m1[:m2.shape[0],:m2.shape[1],:m2.shape[2],:m2.shape[3]] = m2[:,:,:,:]
+
+####################################
 
 def inprod(mps1, mpo, mps2, direction=0):
     """
@@ -266,9 +335,9 @@ def inprod(mps1, mpo, mps2, direction=0):
         E = np.einsum('rbR,lnr,anNb,LNR',
                       E, mps1[i], mpo[i], mps2[i])
 
-    return np.asscalar(E)
+    return np.einsum('i...i', E)
 
-    
+#####################
 def dot(mpx1, mpx2):
     """
     Computes MPX * MPX
@@ -288,7 +357,7 @@ def dot(mpx1, mpx2):
     new_mpx = np.empty(L, dtype=np.object)
 
     if mpx1[0].ndim == 3 and mpx2[0].ndim == 3:
-        return mps_dot(mpx1, mpx2)
+        return _mps_dot(mpx1, mpx2)
     
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 3:
         for i in range(L):
@@ -336,6 +405,30 @@ def flatten(mpx):
             mps.append(np.reshape(mpx[i], (sh[0], sh[1]*sh[2], -1)))
         return np.asarray(mps)
 
+def unflatten(mpx):
+    """
+    Converts MPX object into MPO
+
+    Parameters
+    ----------
+    mpx : MPS or MPO
+
+    Returns
+    -------
+    mpo : MPO
+    """
+    if mpx[0].ndim == 4: # already MPO
+        return mpx
+    else:
+        assert mpx[0].ndim == 3
+        L = len(mpx)
+        mpo = []
+        for i in range(L):
+            sh = mpx[i].shape
+            p = int(sqrt(mpx[i].shape[1]))
+            mpo.append(np.reshape(mpx[i], (sh[0], p, p, -1)))
+        return np.asarray(mpo)
+                    
 def dot_compress(mpx1,mpx2,D,direction=0):
     # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form, with compression of each bond
 
@@ -352,7 +445,7 @@ def dot_compress(mpx1,mpx2,D,direction=0):
         mpx2 = mpx2
 
     if mpx1[0].ndim == 3 and mpx2[0].ndim == 3:
-        return mps_dot(mpx1, mpx2)
+        return _mps_dot(mpx1, mpx2)
     
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 3:
         prev_site = einsum('LNnR,lnr->LlNRr',mpx1[0],mpx2[0])
@@ -405,31 +498,31 @@ def vdot(mps1, mps2, direction=0):
 
     cf. np.vdot
     """
-    return mps_dot(np.conj(mps1), mps2, direction)
+    return _mps_dot(mps1.conj(), mps2, direction)
 
-def mps_dot(mps1, mps2, direction=0):
+def _mps_dot(mps1, mps2, direction=0):
     """
     dot of two MPS, returns scalar
     """
     L = len(mps1)
-    assert len(mps2) == L
-    assert direction in (0, 1)
+    assert len(mps2) == L and direction in (0, 1)
     
     if direction == 0:
-        E = einsum('lnR, lnr -> rR', mps1[0], mps2[0]) 
-        for i in xrange(1, L):
-            # contract with bra
-            E = einsum('rR, RnL -> rnL', E, mps1[i])
-            # contract with ket
-            E = einsum('rnL, rnl -> lL', E, mps2[i])
-    else:
-        E = einsum('Lnr, lnr -> lL', mps1[-1], mps2[-1]) 
-        for i in xrange(L - 1, -1, -1):
-            # contract with bra
-            E = einsum('lL, RnL -> lnR', E, mps1[i])
-            # contract with ket
-            E = einsum('lnR, rnl -> rR', E, mps2[i])
-    return np.asscalar(E)
+        mps1_ = mps1
+        mps2_ = mps2
+    elif direction == 1:       # contract right to left
+        mps1_ = mps1[::-1]
+        mps2_ = mps2[::-1]
+        
+    E = einsum('InR, inr -> IirR', mps1_[0], mps2_[0]) 
+    for i in xrange(1, L):
+        print E.__class__.__name__
+        # contract with bra
+        E = einsum('IirR, RnL -> IirnL', E, mps1_[i])
+        # contract with ket
+        E = einsum('IirnL, rnl -> IiLl', E, mps2_[i])
+
+    return np.einsum('ijij', E)
 
 def norm(mpx): 
     """

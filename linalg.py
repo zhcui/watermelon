@@ -4,9 +4,8 @@ import scipy, scipy.linalg
 
 def reshape(a, idx):
     """ 
-    Reshape tensors
+    Reshape tensors with index notation
     
-   
     idx: subscripts to split according to ','
          '...' means reshape(-1) if at the beginning/end
                means leave untouched if in the middle
@@ -40,17 +39,18 @@ def reshape(a, idx):
     
     return a.reshape(new_sh)
 
-
-
-def svd(idx, a, DMAX=0):
+def svd(idx, a, D=0, preserve_uv=None):
     """
     Thin Singular Value Decomposition
 
     idx : subscripts to split 
     a : ndarray
-        matrix to do svd.
-    DMAX: int
-        maximal dim to keep.
+      matrix to be decomposed.
+    D : int
+      max #singular values to keep
+    preserve_uv : 'u', 'v', None
+      if 'u' or 'v', 'u', 'v' have same shape as a
+      with extra entries in u, s, v filled with zero
      
     Returns
     -------
@@ -74,16 +74,34 @@ def svd(idx, a, DMAX=0):
     u, s, vt = scipy.linalg.svd(a, full_matrices = False)
     
     M = len(s)
-    if DMAX > 0:
-        M = min(DMAX, M)
+    if D > 0:
+        M = min(D, M)
 
     dwt = np.sum(s[M:])
     u = u[:,:M]
     s = s[:M]
     vt = vt[:M,:]
 
+    if preserve_uv == "u":
+        ubig = np.zeros_like(a)
+        ubig[:u.shape[0],:u.shape[1]] = u
+        sbig = np.zeros((a.shape[1],),dtype=a.dtype)
+        sbig[:s.shape[0]] = s
+        vtbig = np.zeros((a.shape[1], a.shape[1]),dtype=a.dtype)
+        vtbig[:vt.shape[0],:vt.shape[1]] = vt
+        u, s, vt = ubig, sbig, vtbig
+    elif preserve_uv == "v":
+        vtbig = np.zeros_like(a)
+        vtbig[:v.shape[0],:v.shape[1]] = v
+        sbig = np.zeros((a.shape[0],),dtype=a.dtype)
+        sbig[:s.shape[0]] = s
+        ubig = np.zeros((a.shape[0], a.shape[0]),dtype=a.dtype)
+        ubig[:u.shape[0],:u.shape[1]] = u
+        u, s, vt = ubig, sbig, vtbig 
+
     u = np.reshape(u, (a_shape[:nsplit] + (-1,)))
     vt = np.reshape(vt, ((-1,) + a_shape[nsplit:]))
+
     return u, s, vt, dwt
 
 def test_linalg():
