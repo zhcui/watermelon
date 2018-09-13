@@ -522,7 +522,8 @@ def vdot(mps1, mps2, direction=0):
 
     cf. np.vdot
     """
-    return _mps_dot(mps1.conj(), mps2, direction)
+    #return _mps_dot(mps1.conj(), mps2, direction)
+    return _mps_dot(mps1, mps2, direction)
 
 def _mps_dot(mps1, mps2, direction=0, trace=True):
     """
