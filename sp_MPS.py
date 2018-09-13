@@ -83,8 +83,8 @@ def add(mpx1, mpx2):
         l1,n1,r1 = sh1[0],np.prod(sh1[1:-1]),sh1[-1]
         l2,n2,r2 = sh2[0],np.prod(sh2[1:-1]),sh2[-1]
         
-        crds1 = mpx1[i].coords[:]
-        crds2 = mpx2[i].coords[:]
+        crds1 = mpx1[i].coords.copy()
+        crds2 = mpx2[i].coords.copy()
         if i==0:
             crds2[-1] += r1
             nsh = (max(l1,l2),) + sh1[1:-1] + (r1+r2,)
@@ -97,9 +97,10 @@ def add(mpx1, mpx2):
             nsh = (l1+l2,) + sh1[1:-1] + (r1+r2,)
             
         new_crds = np.hstack([crds1, crds2])
-        print "data", mpx1[i].data, mpx2[i].data
         new_data = np.hstack([mpx1[i].data, mpx2[i].data])
-        new_mpx[i] = sp.COO(new_crds, new_data, nsh)
+        
+        new_mpx[i] = sp.COO(new_crds, new_data, shape = nsh)
+        shape  = new_mpx[i].shape
 
     return new_mpx
 
