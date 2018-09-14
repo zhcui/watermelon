@@ -1,12 +1,11 @@
 import numpy as np
 
-einsum = np.einsum
-dot = np.dot
-sqrt = np.sqrt
+_einsum = generic_np.einsum
+_dot = generic_np.dot
+_svd = generic_la.svd
+_sqrt = np.sqrt
 
-import linalg
-
-def create(dp, D=None, bc = None, fn=np.zeros):
+def create(dp, D=None, bc = None, fn=None):
     # TODO: currently if D!=None and pbc, guarantees
     # all bond dims are D; but if obc, then
     # always follows obc_dim. Add option for guaranteed
@@ -61,17 +60,6 @@ def create(dp, D=None, bc = None, fn=np.zeros):
             
     return mpx
 
-def empty(dp, D = None, bc = None):
-    return create(dp, D, bc, fn=np.empty)
-
-def zeros(dp, D = None, bc = None):
-    return create(dp, D, bc, fn=np.zeros)
-
-def rand(dp, D = None, bc = None, seed = None):
-    if seed is not None:
-        np.random.seed(seed)
-    return create(dp, D, bc, fn=np.random.random)
-
 def obc_dim(dp, D=None):
     """
     Right bond dimensions for OBC MPX
@@ -110,7 +98,6 @@ def element(mpx, occ, bc=None):
     -------
     elements: 2D ndarray (pbc) / scalar (obc)
     """
-    print occ
     mats = [None] * len(mpx)
     try: # mpx is an mpo
         if len(occ[0]) == 2:
@@ -121,14 +108,9 @@ def element(mpx, occ, bc=None):
             mats[i] = mpx[i][:,occ[i],:]
 
     element = mats[0]
-    cls = element.__class__
     for i in range(1, len(mpx)):
-        print i, element.__class__.__name__, mats[i].shape
-        element = element.dot(mats[i])
-        #element = cls(element)
-    element = element.todense()
-    #exit()
-    return np.einsum("i...i", element)
+        element = _dot(element, mats[i])
+    return _einsum("i...i", element)
 
 def asfull(mpx):
     """
@@ -198,55 +180,6 @@ def mul(alpha, mpx):
     #new_mpx[0] *= (alpha)
 
     return new_mpx
-
-def add(mpx1, mpx2):
-    """
-    Add MPX1 to MPX2
-
-    Parameters
-    ----------
-    mpx1, mpx2 : MPS or MPO
-    bc : "obc" or "pbc"
-      if "obc" first and last tensors
-      are collapsed to shape (1,...), (...,1)
-
-    Returns
-    -------
-    new_mpx : sum of MPS
-    """
-    L = len(mpx1)
-
-    new_mpx = np.empty(L, dtype=np.object)
-    dtype = np.result_type(mpx1[0], mpx2[0])
-
-    assert len(mpx1)==len(mpx2), 'need to have same lengths: (%d,%d)' % (len(mpx1), len(mpx2))
-    
-    for i in range(L):
-        sh1 = mpx1[i].shape
-        sh2 = mpx2[i].shape
-        assert sh1[1: -1] == sh2[1: -1], 'need physical bonds at site %d to match' % (i)        
-
-        l1,n1,r1 = sh1[0],np.prod(sh1[1:-1]),sh1[-1]
-        l2,n2,r2 = sh2[0],np.prod(sh2[1:-1]),sh2[-1]
-
-        if i==0:
-            new_site = np.zeros((max(l1,l2),n1,r1+r2),dtype=dtype)
-            new_site[:l1,:,:r1] = mpx1[i].reshape((l1,n1,r1))
-            new_site[:l2,:,r1:] = mpx2[i].reshape((l2,n2,r2))
-        elif i==L-1:
-            new_site = np.zeros((l1+l2,n1,max(r1,r2)),dtype=dtype)
-            new_site[:l1,:,:r1] = mpx1[i].reshape((l1,n1,r1))
-            new_site[l1:,:,:r2] = mpx2[i].reshape((l2,n2,r2))
-        else:
-            new_site = np.zeros((l1+l2,n1,r1+r2),dtype=dtype)
-            new_site[:l1,:,:r1] = mpx1[i].reshape((l1,n1,r1))
-            new_site[l1:,:,r1:] = mpx2[i].reshape((l2,n2,r2))
-
-        nsh = new_site.shape
-        new_site = new_site.reshape((nsh[0],)+sh1[1:-1]+(nsh[-1],))
-        new_mpx[i] = new_site
-    
-    return new_mpx
     
 def compress(mpx0, D, preserve_dim=False, direction=0):
     """
@@ -270,39 +203,23 @@ def compress(mpx0, D, preserve_dim=False, direction=0):
         if preserve_dim:
             preserve_uv = "u"
         for i in range(L-1):
-            u, s, vt, dwt = linalg.svd("ij,k", mpx[i], D, preserve_uv)
+            u, s, vt, dwt = _svd("ij,k", mpx[i], D, preserve_uv)
             tot_dwt += dwt
             mpx[i] = u
-            svt = np.dot(np.diag(s), vt)
-            mpx[i+1] = einsum("lj,jnr", svt, mpx[i+1])
+            svt = _dot(_diag(s), vt)
+            mpx[i+1] = _einsum("lj,jnr", svt, mpx[i+1])
     else:
         if preserve_dim:
             preserve_uv = "v"
         for i in range(L-1,0,-1):
-            u, s, vt, dwt = linalg.svd("i,jk", mpx[i], D, preserve_uv)
+            u, s, vt, dwt = _svd("i,jk", mpx[i], D, preserve_uv)
             tot_dwt += dwt
             mpx[i] = vt
-            us = np.dot(u,np.diag(s))
-            mpx[i-1] = einsum("lnj,jr",  mpx[i-1], us)
+            us = _dot(u, _diag(s))
+            mpx[i-1] = _einsum("lnj,jr",  mpx[i-1], us)
 
     return mpx, tot_dwt
 
-def overwrite(mpx, out=None):
-    """
-    Overwrites tensors of mpx2 with tensors of mpx1,
-    with fixed shape of mpx2 tensors.
-
-    Parameters
-    ----------
-    mpx : MPX (source)
-    out : MPX (target) [modified]
-    """
-    for m1, m2 in zip(out, mpx):
-        if len(m2.shape) == 3:
-            m1[:m2.shape[0],:m2.shape[1],:m2.shape[2]] = m2[:,:,:]
-        else:
-            assert len(m2.shape) == 4
-            m1[:m2.shape[0],:m2.shape[1],:m2.shape[2],:m2.shape[3]] = m2[:,:,:,:]
 
 ####################################
 
@@ -335,13 +252,13 @@ def inprod(mps1, mpo, mps2, direction=0):
        mpo_  = mpo[::-1]
        mps2_ = mps2[::-1]
    
-    E = np.einsum('lnr,anNb,LNR->rbR',
+    E = _einsum('lnr,anNb,LNR->rbR',
                   mps1[0], mpo[0], mps2[0])
     for i in range(1,L):
-        E = np.einsum('rbR,lnr,anNb,LNR',
+        E = _einsum('rbR,lnr,anNb,LNR',
                       E, mps1[i], mpo[i], mps2[i])
 
-    return np.einsum('i...i', E)
+    return _einsum('i...i', E)
 
 def dot(mpx1, mpx2):
     """
@@ -366,19 +283,19 @@ def dot(mpx1, mpx2):
     
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 3:
         for i in range(L):
-            new_site = einsum('LNnR,lnr->LlNRr',mpx1[i],mpx2[i])
+            new_site = _einsum('LNnR,lnr->LlNRr',mpx1[i],mpx2[i])
             sh = new_site.shape
             new_mpx[i] = new_site.reshape((sh[0]*sh[1], sh[2], -1))
 
     elif mpx1[0].ndim == 3 and mpx2[0].ndim == 4:
         for i in range(L):
-            new_site = einsum('LNR,lNnr->LlnRr',mpx1[i],mpx2[i])
+            new_site = _einsum('LNR,lNnr->LlnRr',mpx1[i],mpx2[i])
             sh = new_site.shape
             new_mpx[i] = new_site.reshape((sh[0]*sh[1], sh[2], -1))
             
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 4:
         for i in range(L):
-            new_site = einsum('LNMR,lMnr->LlNnRr',mpx1[i],mpx2[i])
+            new_site = _einsum('LNMR,lMnr->LlNnRr',mpx1[i],mpx2[i])
             sh = new_site.shape
             new_mpx[i] = new_site.reshape((sh[0]*sh[1],sh[2],sh[3],-1))
 
@@ -402,7 +319,7 @@ def norm(mpx):
     norm_val = vdot(flatten(mpx),flatten(mpx))
     # catch cases when norm is ~0 but in reality is a small negative number
     assert(norm_val > -1.0e-12), norm_val
-    return np.sqrt(np.abs(norm_val))
+    return _sqrt(np.abs(norm_val))
 
 #####################
 
@@ -446,12 +363,12 @@ def unflatten(mpx):
     else:
         assert mpx[0].ndim == 3
         L = len(mpx)
-        mpo = []
+        mpo = np.empty([L], dtype=np.object)
         for i in range(L):
             sh = mpx[i].shape
             p = int(sqrt(mpx[i].shape[1]))
-            mpo.append(np.reshape(mpx[i], (sh[0], p, p, -1)))
-        return np.asarray(mpo)
+            mpo[i] = np.reshape(mpx[i], (sh[0], p, p, -1))
+        return mpo
                     
 def dot_compress(mpx1,mpx2,D,direction=0):
     # returns mpx1*mpx2 (ie mpsx1 applied to mpsx2) in mpx form, with compression of each bond
@@ -472,10 +389,10 @@ def dot_compress(mpx1,mpx2,D,direction=0):
         return _mps_dot(mpx1, mpx2)
     
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 3:
-        prev_site = einsum('LNnR,lnr->LlNRr',mpx1[0],mpx2[0])
+        prev_site = _einsum('LNnR,lnr->LlNRr',mpx1[0],mpx2[0])
         prev_site = linalg.reshape(prev_site,'ab,c,de')
         for i in range(1,L):
-            new_site = einsum('LNnR,lnr->LlNRr',mpx1[i],mpx2[i])
+            new_site = _einsum('LNnR,lnr->LlNRr',mpx1[i],mpx2[i])
             new_site = linalg.reshape(new_site,'ab,c,de')
             temp_mpx = np.empty(2,dtype=np.object)
             temp_mpx[:] = [prev_site,new_site]
@@ -484,10 +401,10 @@ def dot_compress(mpx1,mpx2,D,direction=0):
         new_mpx[-1] = prev_site
 
     elif mpx1[0].ndim == 3 and mpx2[0].ndim == 4:
-        prev_site = einsum('LNR,lNnr->LlnRr',mpx1[0],mpx2[0])
+        prev_site = _einsum('LNR,lNnr->LlnRr',mpx1[0],mpx2[0])
         prev_site = linalg.reshape(prev_site,'ab,c,de')
         for i in range(1,L):
-            new_site = einsum('LNR,lNnr->LlnRr',mpx1[i],mpx2[i])
+            new_site = _einsum('LNR,lNnr->LlnRr',mpx1[i],mpx2[i])
             new_site = linalg.reshape(new_site,'ab,c,de')
             temp_mpx = np.empty(2,dtype=np.object)
             temp_mpx[:] = [prev_site,new_site]
@@ -496,10 +413,10 @@ def dot_compress(mpx1,mpx2,D,direction=0):
         new_mpx[-1] = prev_site
             
     elif mpx1[0].ndim == 4 and mpx2[0].ndim == 4:
-        prev_site = einsum('LNMR,lMnr->LlNnRr',mpx1[0],mpx2[0])
+        prev_site = _einsum('LNMR,lMnr->LlNnRr',mpx1[0],mpx2[0])
         prev_site = linalg.reshape(prev_site,'ab,cd,ef')
         for i in range(1,L):
-            new_site = einsum('LNMR,lMnr->LlNnRr',mpx1[i],mpx2[i])
+            new_site = _einsum('LNMR,lMnr->LlNnRr',mpx1[i],mpx2[i])
             new_site = linalg.reshape(new_site,'ab,cd,ef')
             temp_mpx = np.empty(2,dtype=np.object)
             temp_mpx[:] = [prev_site,new_site]
@@ -522,8 +439,8 @@ def vdot(mps1, mps2, direction=0):
 
     cf. np.vdot
     """
-    #return _mps_dot(mps1.conj(), mps2, direction)
-    return _mps_dot(mps1, mps2, direction)
+    return _mps_dot(mps1.conj(), mps2, direction)
+    #return _mps_dot(mps1, mps2, direction)
 
 def _mps_dot(mps1, mps2, direction=0, trace=True):
     """
@@ -539,18 +456,17 @@ def _mps_dot(mps1, mps2, direction=0, trace=True):
         mps1_ = mps1[::-1]
         mps2_ = mps2[::-1]
         
-    E = einsum('InR, inr -> IiRr', mps1_[0], mps2_[0]) 
+    E = _einsum('InR, inr -> IiRr', mps1_[0], mps2_[0]) 
     #E = einsum('InR, inr -> IirR', mps1_[0], mps2_[0]) 
     for i in xrange(1, L):
-        #print E.__class__.__name__
         # contract with bra
-        E = einsum('IiRr, RnL -> IirnL', E, mps1_[i])
+        E = _einsum('IiRr, RnL -> IirnL', E, mps1_[i])
         #E = einsum('IirR, RnL -> IirnL', E, mps1_[i])
         # contract with ket
-        E = einsum('IirnL, rnl -> IiLl', E, mps2_[i])
+        E = _einsum('IirnL, rnl -> IiLl', E, mps2_[i])
 
     if trace:
-        return np.einsum('ijij', E)
+        return _einsum('ijij', E)
     else:
         return E
 

@@ -90,8 +90,6 @@ def test_norm():
     mps_pbc = sMPS.zeros(dp, D=7, bc="pbc")
     sMPS.overwrite(mps_obc, out=mps_pbc)
 
-    print mps_pbc.__class__.__name__
-    
     norm_o = np.linalg.norm(MPS.asfull(mps_obc))
     norm_p = np.linalg.norm(MPS.asfull(mps_pbc))
 
@@ -112,7 +110,7 @@ def test_add():
     print mps_obc[0].shape
     print mps_obc[0].coords
     print mps_obc[0].data
-    
+
     assert np.allclose(np.linalg.norm(MPS.asfull(mps_obc)+MPS.asfull(mps_obc2)),
                        MPS.norm(sMPS.add(mps_obc,mps_obc2)))
     assert np.allclose(np.linalg.norm(MPS.asfull(mps_pbc)+MPS.asfull(mps_pbc2)),
