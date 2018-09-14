@@ -10,7 +10,7 @@
   
 * Interface to Cyclops Tensor Framework (modify python interface
   to be interoperable with pydata.sparse)
-  * [paper with Edgar with large app]
+  * write paper with Edgar with large app
   
 ## Quantum chemistry
 * Implement MPO for > 1 site dot algo and implement
@@ -19,10 +19,15 @@
   * many applications
 * Check infrastructure for SU(2)
 * Loop through improvements in QC
+* Infinite DMRG with QC Hamiltonian
 
 ## PEPS
 * implement 2D boundary contraction method; optimize sparse tensor performance
 
+## Paper
+  * paper on design of library and treatment of QN's, also
+    part of documentation of v1.0
+  
 # Medium picture stuff
 
 ## Performance
@@ -62,3 +67,4 @@
 * check quantum numbers/sparse map preserved
 * Interface to randomized SVD
 * general DMRG wrapper, to take scipy function e.g. solve_ivp
+  
