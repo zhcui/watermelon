@@ -132,8 +132,9 @@ def svd(idx, a, DMAX=0):
 
     a_shape = a.shape
     a = np.reshape(a, [np.prod(a.shape[:nsplit]), -1])
-    u, s, vt = scipy.linalg.svd(a, full_matrices = False)
+    u, s, vt = scipy.linalg.svd(a, full_matrices = True)
     
+
     M = len(s)
     if DMAX > 0:
         M = min(DMAX, M)
@@ -141,7 +142,7 @@ def svd(idx, a, DMAX=0):
     dwt = np.sum(s[M:])
     u = u[:,:M]
     s = s[:M]
-    vt = vt[:M,:]
+    vt = vt[:M,:] # ZHC NOTE How to truncate in BCOO version?
 
     u = np.reshape(u, (a_shape[:nsplit] + (-1,)))
     vt = np.reshape(vt, ((-1,) + a_shape[nsplit:]))
