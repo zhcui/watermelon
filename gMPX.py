@@ -9,6 +9,18 @@ _sqrt = np.sqrt
 """
 Generic MPX functions
 """
+
+def loop_mpxs(mpxs, func = None, collect = True, *args):
+    if func is None:
+        for mpx in mpxs:
+            print mpx
+        return
+    if collect:
+        return [func(mpx, *args) for mpx in mpxs]
+    else:
+        for mpx in mpxs:
+            func(mpx, *args)
+
 def create(dp, D=None, bc = None, fn=None, dtype=None):
     # TODO: currently if D!=None and pbc, guarantees
     # all bond dims are D; but if obc, then

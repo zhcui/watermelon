@@ -8,6 +8,9 @@ import sparse
 import sparse.coo
 COO = sparse.coo.COO
 
+def shape(a):
+    return a.shape
+
 def diag(a):
     """
     Perform equivalent of :obj:`numpy.diag`.
@@ -316,7 +319,90 @@ def einsum(idx_str, *tensors, **kwargs):
     result = dot(At,Bt).reshape(shapeCt).transpose(new_orderCt)
     return result
 
+#def svd(idx, a, D=0, preserve_uv=None):
+#    idx0 = re.split(",", idx)
+#    assert len(idx0) == 2
+#    idx0[0].replace(" ", "")
+#
+#    nsplit = len(idx0[0]) 
+#
+#    a_shape = a.shape
+#    a = a.reshape([np.prod(a.shape[:nsplit]), -1])
+#
+#    M = min(a.shape[0], a.shape[1])
+#    if D > 0:
+#        M = min(D, M)
+#
+#    # Arnoldi based, special M==N exception
+#    if M == min(a.shape[0], a.shape[1]):
+#        print "Using Dense SVD"
+#        u, s, vt = scipy.linalg.svd(a.todense(), full_matrices=False)
+#    else:
+#        print "Using Sparse SVD"
+#        u, s, vt = scipy.sparse.linalg.svds(a.to_scipy_sparse(), M)
+#
+#    # print "Singular values are", s
+#    # print u.shape
+#    # print s.shape
+#    # print vt.shape
+#    u = sparse.coo.COO.from_numpy(u)
+#    s = sparse.coo.COO.from_numpy(s)
+#    vt = sparse.coo.COO.from_numpy(vt)
+#
+#    dwt = None
+#
+#    # Need to debug this stuff below
+#    # if preserve_uv == "u":
+#    #     ubig = sparse.coo.COO(coords = u.coords, data = u.data,
+#    #                           shape = a.shape)
+#    #     sbig = sparse.coo.COO(coords = s.coords, data = s.data,
+#    #                           shape = (a.shape[1],))
+#    #     vtbig = sparse.coo.COO(coords = vt.coords, data = vt.data,
+#    #                            shape = (a.shape[1], a.shape[1]))
+#    #     u, s, vt = ubig, sbig, vtbig 
+#    # elif preserve_uv == "v":
+#    #     vtbig = sparse.coo.COO(coords = v.coords, data = v.data,
+#    #                            shape = a.shape)
+#    #     sbig = sparse.coo.COO(coords = s.coords, data = s.data,
+#    #                           shape = (a.shape[0],))
+#    #     ubig = sparse.coo.COO(coords = u.coords, data = u.data,
+#    #                           shape = (a.shape[0], a.shape[0]))
+#    #     u, s, vt = ubig, sbig, vtbig 
+#
+#    # np.set_printoptions(precision=3)
+#    # print "ortho"
+#    # ud = u.todense()
+#    # vtd = vt.todense()
+#    # u1 = np.dot(u.todense().T, u.todense())
+#    # vt1= np.dot(vt.todense(), vt.todense().T)
+#
+#    # print u1
+#    # print vt1
+#    # print "deviations from 1"
+#    # print np.linalg.norm(u1-np.eye(ud.shape[1]))
+#    # print np.linalg.norm(vt1-np.eye(vtd.shape[0]))
+#    
+#    u = u.reshape((a_shape[:nsplit] + (-1,)))
+#    vt = vt.reshape(((-1,) + a_shape[nsplit:]))
+#
+#    # print "all my stuff"
+#    # print u
+#    # print s
+#    # print "----------"
+#    # print u.todense(), u.shape
+#    # print s.todense(), s.shape
+#    # print vt.todense(), vt.shape
+#    # print np.dot(u.todense(), np.dot(np.diag(s.todense()), vt.todense()))
+#    # print a.todense()
+#    # print "----------"
+#    return u, s, vt, dwt
+#
+#def _svd():
+#    pass
+
 def svd(idx, a, D=0, preserve_uv=None):
+    #  ZHC NOTE This is a svd using clustering dense svd.
+    from sparse.coo.core import block_svd as svd
     idx0 = re.split(",", idx)
     assert len(idx0) == 2
     idx0[0].replace(" ", "")
@@ -324,75 +410,21 @@ def svd(idx, a, D=0, preserve_uv=None):
     nsplit = len(idx0[0]) 
 
     a_shape = a.shape
-    a = a.reshape([np.prod(a.shape[:nsplit]), -1])
+    a = a.reshape((np.prod(a.shape[:nsplit]), -1))
+
+    #u, s, vt = scipy.linalg.svd(a, full_matrices = False)
 
     M = min(a.shape[0], a.shape[1])
     if D > 0:
         M = min(D, M)
 
-    # Arnoldi based, special M==N exception
-    if M == min(a.shape[0], a.shape[1]):
-        print "Using Dense SVD"
-        u, s, vt = scipy.linalg.svd(a.todense(), full_matrices=False)
+    if preserve_uv is None:
+        u, s, vt, dwt = svd(a, sort = True, full_matrices = False, dim_keep = M, return_dwt = True)
     else:
-        print "Using Sparse SVD"
-        u, s, vt = scipy.sparse.linalg.svds(a.to_scipy_sparse(), M)
+        # TODO take care of truncation
+        u, s, vt, dwt = svd(a, sort = True, full_matrices = True, return_dwt = True)
 
-    # print "Singular values are", s
-    # print u.shape
-    # print s.shape
-    # print vt.shape
-    u = sparse.coo.COO.from_numpy(u)
-    s = sparse.coo.COO.from_numpy(s)
-    vt = sparse.coo.COO.from_numpy(vt)
+    u = u.reshape(a_shape[:nsplit] + (-1,))
+    vt = vt.reshape((-1,) + a_shape[nsplit:])
 
-    dwt = None
-
-    # Need to debug this stuff below
-    # if preserve_uv == "u":
-    #     ubig = sparse.coo.COO(coords = u.coords, data = u.data,
-    #                           shape = a.shape)
-    #     sbig = sparse.coo.COO(coords = s.coords, data = s.data,
-    #                           shape = (a.shape[1],))
-    #     vtbig = sparse.coo.COO(coords = vt.coords, data = vt.data,
-    #                            shape = (a.shape[1], a.shape[1]))
-    #     u, s, vt = ubig, sbig, vtbig 
-    # elif preserve_uv == "v":
-    #     vtbig = sparse.coo.COO(coords = v.coords, data = v.data,
-    #                            shape = a.shape)
-    #     sbig = sparse.coo.COO(coords = s.coords, data = s.data,
-    #                           shape = (a.shape[0],))
-    #     ubig = sparse.coo.COO(coords = u.coords, data = u.data,
-    #                           shape = (a.shape[0], a.shape[0]))
-    #     u, s, vt = ubig, sbig, vtbig 
-
-    # np.set_printoptions(precision=3)
-    # print "ortho"
-    # ud = u.todense()
-    # vtd = vt.todense()
-    # u1 = np.dot(u.todense().T, u.todense())
-    # vt1= np.dot(vt.todense(), vt.todense().T)
-
-    # print u1
-    # print vt1
-    # print "deviations from 1"
-    # print np.linalg.norm(u1-np.eye(ud.shape[1]))
-    # print np.linalg.norm(vt1-np.eye(vtd.shape[0]))
-    
-    u = u.reshape((a_shape[:nsplit] + (-1,)))
-    vt = vt.reshape(((-1,) + a_shape[nsplit:]))
-
-    # print "all my stuff"
-    # print u
-    # print s
-    # print "----------"
-    # print u.todense(), u.shape
-    # print s.todense(), s.shape
-    # print vt.todense(), vt.shape
-    # print np.dot(u.todense(), np.dot(np.diag(s.todense()), vt.todense()))
-    # print a.todense()
-    # print "----------"
     return u, s, vt, dwt
-
-def _svd():
-    pass
