@@ -25,6 +25,39 @@ def diag(a):
     else:
         raise RuntimeError
 
+
+def diagonal(spmat, axes = None):
+    """
+    For 2D array, it is equavalent to 'ii -> i'
+    For nD array, axes specifies the axes with the same label.
+    e.g. shape = (3, 6, 6, 7, 6, 1) with axes = [1, 2, 4]
+    would equavalent to 'ijjkjl -> ijkl'
+
+    """
+    if axes is None:
+        axes = list(range(spmat.ndim))
+    if len(axes) < 2:
+        return spmat
+    mask = (spmat.coords[axes[0]] == spmat.coords[axes[1]])
+    for i in xrange(2, len(axes)):
+        mask = np.logical_and(mask, (spmat.coords[axes[i]] == spmat.coords[axes[i - 1]]))
+    all_axes = np.arange(spmat.ndim)
+    indep_axes = []
+    flag = True
+    for ax in all_axes:
+        if ax in axes:
+            if flag:
+                indep_axes.append(ax)
+                flag = False
+        else:
+            indep_axes.append(ax)
+
+    coords = spmat.coords[indep_axes][:, mask]
+    data = spmat.data[mask]
+    shape = [spmat.shape[ax] for ax in indep_axes]
+    return COO(coords, data, shape=shape, has_duplicates = False)
+        
+
 def tensordot(a, b, axes=2):
     # taken from sparse.coo
     # only difference is that this fn prevents
@@ -428,3 +461,4 @@ def svd(idx, a, D=0, preserve_uv=None):
     vt = vt.reshape((-1,) + a_shape[nsplit:])
 
     return u, s, vt, dwt
+

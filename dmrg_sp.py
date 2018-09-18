@@ -89,12 +89,15 @@ def diag_onesite(mpo0, lopr, ropr):
         The diagonal element, stored as 'lnr'.
 
     """
-    mpo0_diag = COO(einsum('annb -> anb', mpo0))
-    lopr_diag = COO(einsum('lal -> la', lopr))
-    ropr_diag = COO(einsum('rbr -> br', ropr))
+    #mpo0_diag = COO(einsum('annb -> anb', mpo0))
+    #lopr_diag = COO(einsum('lal -> la', lopr))
+    #ropr_diag = COO(einsum('rbr -> br', ropr))
+    mpo0_diag = sh.diagonal(mpo0, axes = [1, 2])
+    lopr_diag = sh.diagonal(lopr, axes = [0, 2])
+    ropr_diag = sh.diagonal(ropr, axes = [0, 2])
 
     scr1 = einsum('la, anb -> lnb', lopr_diag, mpo0_diag)
-    diag = einsum('lnb, br -> lnr', scr1, ropr_diag)
+    diag = einsum('lnb, rb -> lnr', scr1, ropr_diag)
 
     #diag = scr2
     # ZHC NOTE check the SDcopy of upcast options
@@ -111,6 +114,7 @@ def diag_twosite(lmpo, rmpo, lopr, ropr):
     diag = einsum('lnmc, cr -> lnmr', scr2, ropr)
     return diag
 
+@profile
 def dot_onesite(mpo0, lopr, ropr, wfn0):
     """
     Compute the sigma vector, i.e. sigma = H * c
@@ -240,7 +244,7 @@ def eig_onesite(forward, mpo0, lopr, ropr, wfn0, M, tol, nroots=1):
         return dx / COO((diag_flat.todense() - e))
 
     energy, wfn0s = lib.linalg_helper.davidson(dot_flat, wfn0.ravel(),
-                                               compute_precond_flat, tol = tol, nroots = nroots)
+                                               compute_precond_flat, tol = tol, nroots = nroots, dot = sh.dot)
 
     wfn0s = [wfn0.reshape(mps_shape) for wfn0 in wfn0s]
 
@@ -249,6 +253,7 @@ def eig_onesite(forward, mpo0, lopr, ropr, wfn0, M, tol, nroots=1):
     return wfn0, gaug
 
 
+@profile
 def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
     """
     Optimization for onesite algorithm.
@@ -340,7 +345,6 @@ def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M, tol):
 
 
 
-
 def sweep(mpos, mpss, loprs, roprs, algo = 'onsite', M = 1, tol = 1e-6):
     emin = 1.0e8
     print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
@@ -402,6 +406,7 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'onsite', M = 1, tol = 1e-6):
     print "\t\t\tBACKWARD SWEEP" 
     print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" 
 
+    exit()
     #load(ropr, get_oprfile(input.prefix, RIGHTCANONICAL, N-1));
 
     for i in xrange(N - 1, 0, -1):
