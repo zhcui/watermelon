@@ -1,13 +1,6 @@
 #! /usr/bin/env python 
 
 """
-Simple implementation of DMRG.
-Written by:
-    Zhihao Cui
-    Garnet Chan
-"""
-
-"""
 Current convention for MPS and MPO indexing.
 
     MPS:
@@ -48,18 +41,14 @@ Current convention for MPS and MPO indexing.
 
 import sys
 import numpy as np
-#from numpy import einsum, reshape, diag
 import sparse_helper
 from sparse_helper import einsum, diag, svd 
 sh = sparse_helper
-#import linalg
-#import MPSblas
 import sMPX
 import gMPX
 from gMPX import loop_mpxs
 from sparse import COO
-from pyscf import lib
-
+import linalg_helper
 
 def diag_onesite(mpo0, lopr, ropr):
     """
@@ -114,7 +103,7 @@ def diag_twosite(lmpo, rmpo, lopr, ropr):
     diag = einsum('lnmc, cr -> lnmr', scr2, ropr)
     return diag
 
-@profile
+#@profile
 def dot_onesite(mpo0, lopr, ropr, wfn0):
     """
     Compute the sigma vector, i.e. sigma = H * c
@@ -243,17 +232,18 @@ def eig_onesite(forward, mpo0, lopr, ropr, wfn0, M, tol, nroots=1):
     def compute_precond_flat(dx, e, x0):
         return dx / COO((diag_flat.todense() - e))
 
-    energy, wfn0s = lib.linalg_helper.davidson(dot_flat, wfn0.ravel(),
-                                               compute_precond_flat, tol = tol, nroots = nroots, dot = sh.dot)
+    #dot_func = sh.dot
+    dot_func = sparse.coo.core.common.dot
+    energy, wfn0s = linalg_helper.davidson(dot_flat, wfn0.ravel(),
+                                               compute_precond_flat, tol = tol, nroots = nroots, dot = dot_func)
 
     wfn0s = [wfn0.reshape(mps_shape) for wfn0 in wfn0s]
 
-    # implement state average ...
+    # TODO implement state average ...
     wfn0, gaug = canonicalize(forward, wfn0, M) # wfn0 becomes left/right canonical
     return wfn0, gaug
 
 
-@profile
 def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
     """
     Optimization for onesite algorithm.
@@ -290,7 +280,7 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
     def compute_precond_flat(dx, e, x0):
         return COO(dx.todense() / (diag_flat.todense() - e))
 
-    energy, wfn0 = lib.linalg_helper.davidson(dot_flat, wfn0.ravel(), compute_precond_flat, tol = tol)
+    energy, wfn0 = linalg_helper.davidson(dot_flat, wfn0.ravel(), compute_precond_flat, tol = tol)
     wfn0 = wfn0.reshape(mps_shape)
     
     if forward:
@@ -329,7 +319,7 @@ def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M, tol):
     def compute_precond_flat(dx, e, x0):
         return dx / (diag_flat - e)
 
-    energy, wfn0 = lib.linalg_helper.davidson(dot_flat, wfn2.ravel(), compute_precond_flat)
+    energy, wfn0 = linalg_helper.davidson(dot_flat, wfn2.ravel(), compute_precond_flat)
     wfn0 = wfn0.reshape(mps_shape)
 
     if forward:
@@ -342,8 +332,6 @@ def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M, tol):
         wfn1 = einsum("ijk, kl -> ijl", wfn1, gaug)
         ropr = renormalize(0, mpo0, ropr, wfn0.conj(), wfn0)
         return energy, wfn0, wfn1, ropr
-
-
 
 def sweep(mpos, mpss, loprs, roprs, algo = 'onsite', M = 1, tol = 1e-6):
     emin = 1.0e8
@@ -406,7 +394,7 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'onsite', M = 1, tol = 1e-6):
     print "\t\t\tBACKWARD SWEEP" 
     print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" 
 
-    exit()
+    #exit()
     #load(ropr, get_oprfile(input.prefix, RIGHTCANONICAL, N-1));
 
     for i in xrange(N - 1, 0, -1):
@@ -510,6 +498,7 @@ def initialize_heisenberg(N, h, J, M):
     # NOTE the loprs and roprs should be list currently to support pop()!
     return mpss, mpos, loprs, roprs
     
+#@profile
 def test():
     N = 20
     h = 0.0

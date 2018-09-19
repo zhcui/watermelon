@@ -46,16 +46,14 @@ Current convention for MPS and MPO indexing.
 
 """
 
-
 import sys
+from enum import Enum
 import numpy as np
-import numpy_helper as nh
-from numpy import einsum, diag, reshape
-import dMPX
-import gMPX as MPSblas
-from gMPX import loop_mpxs
-from sparse import COO
-import linalg_helper
+from numpy import einsum, reshape, diag
+import linalg_pbc as linalg
+from pyscf import lib
+import MPSblas_pbc as MPSblas
+from MPSblas_pbc import loop_mpxs
 
 
 def diag_onesite(mpo0, lopr, ropr):
@@ -87,27 +85,30 @@ def diag_onesite(mpo0, lopr, ropr):
 
     """
 
+    # ZHC NOTE TODO Support lal -> la type einsum!!!
+
     mpo0_diag = einsum('annb -> anb', mpo0)
-    lopr_diag = einsum('lal -> la', lopr)
-    ropr_diag = einsum('rbr -> br', ropr)
+    lopr_diag = einsum('scslal -> scla', lopr)
+    ropr_diag = einsum('rbrtdt -> brtd', ropr)
 
-    scr1 = einsum('la, anb -> lnb', lopr_diag, mpo0_diag)
-    diag = einsum('lnb, br -> lnr', scr1, ropr_diag)
+    scr1 = einsum('scla, anb -> sclnb', lopr_diag, mpo0_diag)
+    diag = einsum('sclnb, brtd -> sclnrtd', scr1, ropr_diag)
 
+    diag = einsum('sclnrsc -> lnr', diag)
     #diag = scr2
     # ZHC NOTE check the SDcopy of upcast options
     return diag
 
-def diag_twosite(lmpo, rmpo, lopr, ropr):
-    lmpo_diag = einsum('annb -> anb', lmpo)
-    rmpo_diag = einsum('bmmc -> bmc', rmpo)
-    lopr = einsum('lal->la', lopr)
-    ropr = einsum('rcr-> cr', ropr)
-
-    scr1 = einsum('la, anb -> lnb', lopr, lmpo)
-    scr2 = einsum('lnb, bmc -> lnmc', scr1, rmpo)
-    diag = einsum('lnmc, cr -> lnmr', scr2, ropr)
-    return diag
+#def diag_twosite(lmpo, rmpo, lopr, ropr):
+#    lmpo_diag = einsum('annb -> anb', lmpo)
+#    rmpo_diag = einsum('bmmc -> bmc', rmpo)
+#    lopr = einsum('lal->la', lopr)
+#    ropr = einsum('rcr-> cr', ropr)
+#
+#    scr1 = einsum('la, anb -> lnb', lopr, lmpo)
+#    scr2 = einsum('lnb, bmc -> lnmc', scr1, rmpo)
+#    diag = einsum('lnmc, cr -> lnmr', scr2, ropr)
+#    return diag
 
 def dot_onesite(mpo0, lopr, ropr, wfn0):
     """
@@ -141,25 +142,75 @@ def dot_onesite(mpo0, lopr, ropr, wfn0):
     """
     # ZHC NOTE the contraction order and stored structure may be optimized.
 
-    scr1 = einsum('Lal, lnr -> Lanr', lopr, wfn0)
-    scr2 = einsum('Lanr, aNnb -> LNbr', scr1, mpo0)
-    sgv0 = einsum('LNbr, Rbr -> LNR', scr2, ropr)
-    return sgv0
+    scr1 = einsum('ScsLal, lnr -> ScsLanr', lopr, wfn0)
+   
+    ovlp_mat = einsum('ScsLal, RarScs -> LRlr ', lopr, ropr)
+    ovlp_mat = ovlp_mat.reshape((ovlp_mat.shape[0]*ovlp_mat.shape[1], ovlp_mat.shape[2]*ovlp_mat.shape[3]))
+    print np.linalg.norm(ovlp_mat - ovlp_mat.T)
+    print np.linalg.eigh(ovlp_mat)[0]
 
-def dot_twosite(lmpo, rmpo, lopr, ropr, wfn0):
-    """
-    Compute the sigma vector, i.e. sigma = H * c
-    used for Davidson algorithm, in the twosite algorithm
+    ovlp = einsum('ScsLanr, RarTdt -> ScsLnRTdt', scr1, ropr)
+    ovlp = einsum('ScsLnRScs -> LnR', ovlp)
+    
+    scr2 = einsum('ScsLanr, aNnb -> ScsLNbr', scr1, mpo0)
+    sgv0 = einsum('ScsLNbr, RbrTdt -> ScsLNRTdt', scr2, ropr)
+    sgv0 = einsum('ScsLNRScs -> LNR', sgv0)
 
-     _L N M R_
-    |___|_|___|
-    |___|_|___|
-    """
-    scr1 = einsum("Lal, lnmr -> Lanmr", lopr, wfn0)
-    scr2 = einsum("Lanmr, aNnb -> LNbmr", scr1, lmpo)
-    scr3 = einsum("LNbmr, bMmc -> LNMcr", scr2, rmpo)
-    sgv0 = einsum("LNMcr, Rcr -> LNMR", scr3, ropr)
-    return sgv0
+    return (sgv0, ovlp)
+
+
+#def dot_twosite(lmpo, rmpo, lopr, ropr, wfn0):
+#    """
+#    Compute the sigma vector, i.e. sigma = H * c
+#    used for Davidson algorithm, in the twosite algorithm
+#
+#     _L N M R_
+#    |___|_|___|
+#    |___|_|___|
+#    """
+#    scr1 = einsum("Lal, lnmr -> Lanmr", lopr, wfn0)
+#    scr2 = einsum("Lanmr, aNnb -> LNbmr", scr1, lmpo)
+#    scr3 = einsum("LNbmr, bMmc -> LNMcr", scr2, rmpo)
+#    sgv0 = einsum("LNMcr, Rcr -> LNMR", scr3, ropr)
+#    return sgv0
+#
+#def overlap_onesite(lopr, ropr, wfn0):
+#    """
+#    Compute the sigma vector, i.e. sigma = H * c
+#    used for Davidson algorithm.
+#
+#    Math
+#    ----------
+#
+#     _L N R_
+#    |___|___|
+#    |___|___|
+#
+#
+#    Parameters
+#    ----------
+#    mpo0 : ndarray
+#        The MPO.
+#    lopr : ndarray
+#        left block operators
+#    ropr : ndarray
+#        right block operators
+#    wfn0 : ndarray
+#        The current MPS. (wavefunction for desired roots)
+#     
+#    Returns
+#    -------
+#    sgv0 : ndarray
+#        The sigma vector, stored as LNR.
+#
+#    """
+#    # ZHC NOTE the contraction order and stored structure may be optimized.
+#
+#    scr1 = einsum('ScsLal, lnr -> ScsLanr', lopr, wfn0)
+#    #scr2 = einsum('ScsLanr, aNnb -> ScsLNbr', scr1, mpo0)
+#    sgv0 = einsum('ScsLanr, RarTdt -> ScsLnRTdt', scr1, ropr)
+#    sgv0 = einsum('ScsLnRScs -> LnR', sgv0)
+#    return sgv0
 	
 
 def canonicalize(forward, wfn0, M = 0):
@@ -185,10 +236,10 @@ def canonicalize(forward, wfn0, M = 0):
     """
 
     if forward:
-        mps0, s, wfn1, dwt = nh.svd("ij, k", wfn0, M)
+        mps0, s, wfn1, dwt = linalg.svd("ij, k", wfn0, M)
         gaug = einsum("ij, jk -> ik", diag(s), wfn1)
     else:
-        wfn1, s, mps0, dwt = nh.svd("i, jk", wfn0, M)
+        wfn1, s, mps0, dwt = linalg.svd("i, jk", wfn0, M)
         gaug = einsum("ij, jk -> ik", wfn1, diag(s))
     return mps0, gaug
         
@@ -218,33 +269,36 @@ def renormalize(forward, mpo0, opr0, bra0, ket0):
     """
  
     if forward:
-        scr = einsum('Lal, lnr -> Lanr', opr0, ket0)
-        scr = einsum('Lanr, aNnb -> LNbr', scr, mpo0)
-        opr1 = einsum('LNR, LNbr -> Rbr', bra0, scr)
+        scr = einsum('ScsLal, lnr -> ScsLanr', opr0, ket0)
+        scr = einsum('ScsLanr, aNnb -> ScsLNbr', scr, mpo0)
+        opr1 = einsum('LNR, ScsLNbr -> ScsRbr', bra0, scr)
     else:
-        scr = einsum('LNR, Rbr -> LNbr', bra0, opr0)
-        scr = einsum('LNbr, aNnb -> Lanr', scr, mpo0)
-        opr1 = einsum('Lanr, lnr-> Lal ', scr, ket0)
+        scr = einsum('LNR, RbrTdt -> LNbrTdt', bra0, opr0)
+        #print scr.shape
+        #print mpo0.shape
+        scr = einsum('LNbrTdt, aNnb -> LanrTdt', scr, mpo0)
+        #print scr.shape
+        opr1 = einsum('LanrTdt, lnr-> LalTdt ', scr, ket0)
     
     return opr1    
 
-def eig_onesite(forward, mpo0, lopr, ropr, wfn0, M, tol, nroots=1):
-     diag_flat = diag_onesite(mpo0, lopr, ropr).ravel()
-     mps_shape = wfn0.shape
-     
-     def dot_flat(x):
-         return dot_onesite(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
-     def compute_precond_flat(dx, e, x0):
-         return dx / (diag_flat - e)
-
-     energy, wfn0s = linalg_helper.davidson(dot_flat, wfn0.ravel(),
-                                                compute_precond_flat, tol = tol, nroots = nroots)
-
-     wfn0s = [wfn0.reshape(mps_shape) for wfn0 in wfn0s]
-
-     # implement state average ...
-     wfn0, gaug = canonicalize(forward, wfn0, M) # wfn0 becomes left/right canonical
-     return wfn0, gaug
+#def eig_onesite(forward, mpo0, lopr, ropr, wfn0, M, tol, nroots=1):
+#     diag_flat = diag_onesite(mpo0, lopr, ropr).ravel()
+#     mps_shape = wfn0.shape
+#     
+#     def dot_flat(x):
+#         return dot_onesite(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
+#     def compute_precond_flat(dx, e, x0):
+#         return dx / (diag_flat - e)
+#
+#     energy, wfn0s = lib.linalg_helper.davidson(dot_flat, wfn0.ravel(),
+#                                                compute_precond_flat, tol = tol, nroots = nroots)
+#
+#     wfn0s = [wfn0.reshape(mps_shape) for wfn0 in wfn0s]
+#
+#     # implement state average ...
+#     wfn0, gaug = canonicalize(forward, wfn0, M) # wfn0 becomes left/right canonical
+#     return wfn0, gaug
 
 
 def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
@@ -279,12 +333,16 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
     
     mps_shape = wfn0.shape
     def dot_flat(x):
-        return dot_onesite(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
+        sigma, ovlp = dot_onesite(mpo0, lopr, ropr, x.reshape(mps_shape))
+        return (sigma.ravel(), ovlp.ravel())
     def compute_precond_flat(dx, e, x0):
         return dx / (diag_flat - e)
+        #return dx
 
+    
+    energy, wfn0 = lib.linalg_helper.dgeev(dot_flat, wfn0.ravel(), compute_precond_flat, tol = tol, verbose=0)
+    
 
-    energy, wfn0 = linalg_helper.davidson(dot_flat, wfn0.ravel(), compute_precond_flat, tol = tol)
     wfn0 = wfn0.reshape(mps_shape)
     
     if forward:
@@ -298,45 +356,45 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
         ropr = renormalize(0, mpo0, ropr, wfn0.conj(), wfn0)
         return energy, wfn0, wfn1, ropr
 
-def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M, tol):
-    """
-    Optimization for twosite algorithm.
-    
-    Parameters
-    ----------
-    M : int
-        bond dimension
-     
-    Returns
-    -------
-    energy : float or list of floats
-        The energy of desired root(s).
-
-    """
-    wfn2 = einsum("lnr, rms -> lnms", lwfn, rwfn)
-    diag = diag_twosite(lmpo, rmpo, lopr, ropr)
-
-    mps_shape = wfn2.shape
-    
-    def dot_flat(x):
-        return dot_twosite(lmpo, rmpo, lopr, ropr, x.reshape(mps_shape)).ravel()
-    def compute_precond_flat(dx, e, x0):
-        return dx / (diag_flat - e)
-
-    energy, wfn0 = lib.linalg_helper.davidson(dot_flat, wfn2.ravel(), compute_precond_flat)
-    wfn0 = wfn0.reshape(mps_shape)
-
-    if forward:
-        wfn0, gaug = canonicalize(1, wfn0, M) # wfn0 R => lmps gaug
-        wfn1 = einsum("ij, jkl -> ikl", gaug, wfn1)
-        lopr = renormalize(1, mpo0, lopr, wfn0.conj(), wfn0)
-        return energy, wfn0, wfn1, lopr
-    else:
-        wfn0, gaug = canonicalize(0, wfn0, M) # wfn0 R => lmps gaug
-        wfn1 = einsum("ijk, kl -> ijl", wfn1, gaug)
-        ropr = renormalize(0, mpo0, ropr, wfn0.conj(), wfn0)
-        return energy, wfn0, wfn1, ropr
-
+#def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M, tol):
+#    """
+#    Optimization for twosite algorithm.
+#    
+#    Parameters
+#    ----------
+#    M : int
+#        bond dimension
+#     
+#    Returns
+#    -------
+#    energy : float or list of floats
+#        The energy of desired root(s).
+#
+#    """
+#    wfn2 = einsum("lnr, rms -> lnms", lwfn, rwfn)
+#    diag = diag_twosite(lmpo, rmpo, lopr, ropr)
+#
+#    mps_shape = wfn2.shape
+#    
+#    def dot_flat(x):
+#        return dot_twosite(lmpo, rmpo, lopr, ropr, x.reshape(mps_shape)).ravel()
+#    def compute_precond_flat(dx, e, x0):
+#        return dx / (diag_flat - e)
+#
+#    energy, wfn0 = lib.linalg_helper.davidson(dot_flat, wfn2.ravel(), compute_precond_flat)
+#    wfn0 = wfn0.reshape(mps_shape)
+#
+#    if forward:
+#        wfn0, gaug = canonicalize(1, wfn0, M) # wfn0 R => lmps gaug
+#        wfn1 = einsum("ij, jkl -> ikl", gaug, wfn1)
+#        lopr = renormalize(1, mpo0, lopr, wfn0.conj(), wfn0)
+#        return energy, wfn0, wfn1, lopr
+#    else:
+#        wfn0, gaug = canonicalize(0, wfn0, M) # wfn0 R => lmps gaug
+#        wfn1 = einsum("ijk, kl -> ijl", wfn1, gaug)
+#        ropr = renormalize(0, mpo0, ropr, wfn0.conj(), wfn0)
+#        return energy, wfn0, wfn1, ropr
+#
 
 
 
@@ -349,7 +407,7 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'onsite', M = 1, tol = 1e-6):
     N = len(mpss)
     assert(len(mpos) == N);
 
-    for i in xrange(0, N - 1): 
+    for i in xrange(1, N - 2): 
 
         print "\t===================================================================================================="
         print "\t\tSITE [  %5d  ] "%i
@@ -403,7 +461,7 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'onsite', M = 1, tol = 1e-6):
 
     #load(ropr, get_oprfile(input.prefix, RIGHTCANONICAL, N-1));
 
-    for i in xrange(N - 1, 0, -1):
+    for i in xrange(N - 2, 1, -1):
           
         print "\t===================================================================================================="
         print "\t\tSITE [  %5d  ] "%i
@@ -473,38 +531,86 @@ def heisenberg_mpo(N, h, J):
     W.append(einsum('abnN -> aNnb', np.array([[I], [Sp], [Sm], [Sz], [-h * Sz]])))
     return W
 
+#def init_opr(bra, mpo, ket):
+#    
+#    scr = einsum('SNL, cNna -> ScnaL', bra, mpo)
+#    scr = einsum('ScnaL, snl -> ScsLal', scr, ket)
+#    return scr
+
+def init_lopr(bra, mpo, ket):
+    
+    scr = einsum('SNL, cNna -> ScnaL', bra, mpo)
+    scr = einsum('ScnaL, snl -> ScsLal', scr, ket)
+    return scr
+
+def init_ropr(bra, mpo, ket):
+    
+    scr = einsum('SNL, cNna -> ScnaL', bra, mpo)
+    scr = einsum('ScnaL, snl -> ScsLal', scr, ket)
+    return scr
+
+def init_opr_identity(M):
+    
+    I = np.eye(M)
+    I2 = np.eye(1)
+    #I2 = I
+    opr = einsum('SL, ca, sl -> ScsLal', I, I2, I)
+    #print opr
+    #exit()
+    return opr
+    #scr = einsum('SNL, cNna -> ScnaL', bra, mpo)
+    #scr = einsum('ScnaL, snl -> ScsLal', scr, ket)
+    #return scr
+
 def initialize_heisenberg(N, h, J, M):
     """
     Initialize the MPS, MPO, lopr and ropr.
     """
     # MPS
-    mpss = dMPX.rand([2] * N, D = M, bc = 'obc', seed = 0) 
+    mpss = MPSblas.rand([2] * N, D = M, seed = 0, full_tensor = True) 
+    mpss_0 = MPSblas.rand([2] * N, D = M, seed = 0, full_tensor = False)
+    for mps, mps_0 in zip(mpss, mpss_0):
+        mps = np.zeros_like(mps)
+        mps[:mps_0.shape[0], :mps_0.shape[1], :mps_0.shape[2]] = mps_0
+
+
     normalize_factor = 1.0 / MPSblas.norm(mpss) 
     mpss = MPSblas.mul(normalize_factor, mpss) 
-  
+
+
     # make MPS right canonical
     for i in xrange(N - 1, 0, -1):
         mpss[i], gaug = canonicalize(0, mpss[i], M = M)
         mpss[i - 1] = einsum("ijk, kl -> ijl", mpss[i - 1], gaug)
+    
 
     # MPO
     mpos = np.asarray(heisenberg_mpo(N, h, J))
 
     # lopr
-    loprs = [np.array([[[1.0]]])]
+    #loprs = [init_opr_identity(M)]
     # ropr
-    roprs = [np.array([[[1.0]]])]
-    for i in xrange(N - 1, 0, -1):
+    #roprs = [init_opr_identity(M)]
+    # lopr
+    #loprs = []
+    # ropr
+    #roprs = []
+    # lopr
+    loprs = [init_lopr(mpss[0].conj(), mpos[0], mpss[0])]
+    # ropr
+    roprs = [init_ropr(mpss[-1].conj(), mpos[-1], mpss[-1])]
+    
+    for i in xrange(N - 2, 1, -1):
         roprs.append(renormalize(0, mpos[i], roprs[-1], mpss[i].conj(), mpss[i]))
     
     # NOTE the loprs and roprs should be list currently to support pop()!
     return mpss, mpos, loprs, roprs
     
 def test():
-    N = 20
+    N = 10
     h = 0.0
     J = 1.0
-    M = 50
+    M = 5
     mpss, mpos, loprs, roprs = initialize_heisenberg(N, h, J, M)    
     energy = sweep(mpos, mpss, loprs, roprs, algo = 'onesite', M = M, tol = 1e-6)
     

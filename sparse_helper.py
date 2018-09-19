@@ -57,7 +57,7 @@ def diagonal(spmat, axes = None):
     shape = [spmat.shape[ax] for ax in indep_axes]
     return COO(coords, data, shape=shape, has_duplicates = False)
         
-
+#@profile
 def tensordot(a, b, axes=2):
     # taken from sparse.coo
     # only difference is that this fn prevents
@@ -189,7 +189,7 @@ def dot(a, b):
 
     return tensordot(a, b, axes=(a_axis, b_axis))
 
-
+#@profile
 def _dot(a, b):
     # unchanged from sparse.coo
 
@@ -199,9 +199,10 @@ def _dot(a, b):
 
     if isinstance(b, (COO, scipy.sparse.spmatrix)):
         b = b.tocsc()
+        #b = b.tocsr()
     return aa.dot(b)
 
-
+#@profile
 def einsum(idx_str, *tensors, **kwargs):
     # from pyscf.lib.numpy_helper
     '''Perform a more efficient einsum via reshaping to a matrix multiply.
