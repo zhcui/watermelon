@@ -1339,6 +1339,12 @@ def _gen_x0(v, xs):
     for i in reversed(range(space-1)):
         xsi = xs[i]
         for k in range(nroots):
+            #xsi.data *= v[i,k]
+            #x0k_d = x0[k].todense()
+            #xsi_d = xsi.todense()
+            #x0k_d += v[i,k] * xsi_d
+            #scr = v[i, k] * xsi
+            #x0[k] += scr
             x0[k] += v[i,k] * xsi
     return x0
 

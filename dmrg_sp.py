@@ -41,6 +41,7 @@ Current convention for MPS and MPO indexing.
 
 import sys
 import numpy as np
+import sparse
 import sparse_helper
 from sparse_helper import einsum, diag, svd 
 sh = sparse_helper
@@ -223,27 +224,27 @@ def renormalize(forward, mpo0, opr0, bra0, ket0):
     
     return opr1    
 
-def eig_onesite(forward, mpo0, lopr, ropr, wfn0, M, tol, nroots=1):
-    diag_flat = diag_onesite(mpo0, lopr, ropr).ravel()
-    mps_shape = wfn0.shape
-    
-    def dot_flat(x):
-        return dot_onesite(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
-    def compute_precond_flat(dx, e, x0):
-        return dx / COO((diag_flat.todense() - e))
+#def eig_onesite(forward, mpo0, lopr, ropr, wfn0, M, tol, nroots=1):
+#    diag_flat = diag_onesite(mpo0, lopr, ropr).ravel()
+#    mps_shape = wfn0.shape
+#    
+#    def dot_flat(x):
+#        return dot_onesite(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
+#    def compute_precond_flat(dx, e, x0):
+#        return dx / COO((diag_flat.todense() - e))
+#
+#    #dot_func = sh.dot
+#    dot_func = sparse.coo.common.dot
+#    energy, wfn0s = linalg_helper.davidson(dot_flat, wfn0.ravel(),
+#                                               compute_precond_flat, tol = tol, nroots = nroots, dot = dot_func)
+#
+#    wfn0s = [wfn0.reshape(mps_shape) for wfn0 in wfn0s]
+#
+#    # TODO implement state average ...
+#    wfn0, gaug = canonicalize(forward, wfn0, M) # wfn0 becomes left/right canonical
+#    return wfn0, gaug
 
-    #dot_func = sh.dot
-    dot_func = sparse.coo.core.common.dot
-    energy, wfn0s = linalg_helper.davidson(dot_flat, wfn0.ravel(),
-                                               compute_precond_flat, tol = tol, nroots = nroots, dot = dot_func)
-
-    wfn0s = [wfn0.reshape(mps_shape) for wfn0 in wfn0s]
-
-    # TODO implement state average ...
-    wfn0, gaug = canonicalize(forward, wfn0, M) # wfn0 becomes left/right canonical
-    return wfn0, gaug
-
-
+#@profile
 def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
     """
     Optimization for onesite algorithm.
@@ -272,16 +273,23 @@ def optimize_onesite(forward, mpo0, lopr, ropr, wfn0, wfn1, M, tol):
 
     """
 
-    diag_flat = diag_onesite(mpo0, lopr, ropr).ravel()
+    #diag_flat = diag_onesite(mpo0, lopr, ropr).ravel()
+    diag_flat = diag_onesite(mpo0, lopr, ropr).ravel().todense()
     
     mps_shape = wfn0.shape
     def dot_flat(x):
-        return dot_onesite(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
+        #return dot_onesite(mpo0, lopr, ropr, x.reshape(mps_shape)).ravel()
+        return dot_onesite(mpo0, lopr, ropr, COO(x.reshape(mps_shape))).ravel().todense()
     def compute_precond_flat(dx, e, x0):
-        return COO(dx.todense() / (diag_flat.todense() - e))
+        #return COO(dx.todense() / (diag_flat.todense() - e))
+        return dx / (diag_flat - e)
 
-    energy, wfn0 = linalg_helper.davidson(dot_flat, wfn0.ravel(), compute_precond_flat, tol = tol)
-    wfn0 = wfn0.reshape(mps_shape)
+    #dot_func = sparse.coo.common.dot
+    dot_func = np.dot
+    #energy, wfn0 = linalg_helper.davidson(dot_flat, wfn0.ravel(), compute_precond_flat, tol = tol, dot = dot_func)
+    energy, wfn0 = linalg_helper.davidson(dot_flat, wfn0.ravel().todense(), compute_precond_flat, tol = tol, dot = dot_func)
+    #wfn0 = wfn0.reshape(mps_shape)
+    wfn0 = COO(wfn0.reshape(mps_shape))
     
     if forward:
         wfn0, gaug = canonicalize(1, wfn0, M) # wfn0 R => lmps gaug
@@ -333,6 +341,7 @@ def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M, tol):
         ropr = renormalize(0, mpo0, ropr, wfn0.conj(), wfn0)
         return energy, wfn0, wfn1, ropr
 
+#@profile
 def sweep(mpos, mpss, loprs, roprs, algo = 'onsite', M = 1, tol = 1e-6):
     emin = 1.0e8
     print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
@@ -471,6 +480,7 @@ def heisenberg_mpo(N, h, J):
 
     return W
 
+#@profile
 def initialize_heisenberg(N, h, J, M):
     """
     Initialize the MPS, MPO, lopr and ropr.

@@ -153,6 +153,7 @@ def tensordot(a, b, axes=2):
         res = np.asarray(res)
     return res.reshape(olda + oldb)
 
+#@profile
 def dot(a, b):
     # unchanged from sparse.coo
     """

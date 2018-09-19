@@ -499,7 +499,8 @@ def initialize_heisenberg(N, h, J, M):
     
     # NOTE the loprs and roprs should be list currently to support pop()!
     return mpss, mpos, loprs, roprs
-    
+
+#@profile
 def test():
     N = 20
     h = 0.0
