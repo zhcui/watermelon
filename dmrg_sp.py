@@ -50,6 +50,7 @@ import gMPX
 from gMPX import loop_mpxs
 from sparse import COO
 import linalg_helper
+import time
 
 def diag_onesite(mpo0, lopr, ropr):
     """
@@ -343,6 +344,7 @@ def optimize_twosite(forward, lmpo, rmpo, lopr, ropr, lwfn, rwfn, M, tol):
 
 #@profile
 def sweep(mpos, mpss, loprs, roprs, algo = 'onsite', M = 1, tol = 1e-6):
+    t_start = time.time()
     emin = 1.0e8
     print "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
     print "\t\t\tFORWARD SWEEP"
@@ -448,6 +450,9 @@ def sweep(mpos, mpss, loprs, roprs, algo = 'onsite', M = 1, tol = 1e-6):
     #save(mpss[0], get_mpsfile(input.prefix, WAVEFUNCTION, 0));
     #mpos[0].clear();
     #mpss[0].clear();
+
+    t_end = time.time()
+    print "Sweep time: ", t_end - t_start 
 
     print "\t===================================================================================================="
 

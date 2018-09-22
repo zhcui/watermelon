@@ -8,6 +8,15 @@ import sparse
 import sparse.coo
 COO = sparse.coo.COO
 
+from ctypes import *
+import scipy.sparse._sparsetools as _sparsetools
+try:
+    libspmm = cdll.LoadLibrary("./libspmm.so")
+    FOUND_LIB = True
+except (OSError):
+    FOUND_LIB = False
+
+
 def shape(a):
     return a.shape
 
@@ -190,7 +199,6 @@ def dot(a, b):
 
     return tensordot(a, b, axes=(a_axis, b_axis))
 
-#@profile
 def _dot(a, b):
     # unchanged from sparse.coo
 
@@ -202,6 +210,89 @@ def _dot(a, b):
         b = b.tocsc()
         #b = b.tocsr()
     return aa.dot(b)
+
+def get_indptr(A):
+    #row = A.row
+    row = A.coords[0]
+    indptr = np.zeros(A.shape[0] + 1, dtype=np.int32)
+    np.cumsum(np.bincount(row, minlength=A.shape[0]), out=indptr[1:])
+    return indptr
+
+if FOUND_LIB:
+
+    def mul_coo_coo(A, B):
+
+        M, K = A.shape
+        K_, N = B.shape
+        assert(K == K_)
+
+        # convert dtype to c_int and c_double
+        rowIndex_A = get_indptr(A)
+        #columns_A = A.col.astype(np.int32)
+        columns_A = A.coords[1].astype(np.int32)
+        values_A = A.data.astype(np.double)
+        
+        rowIndex_B = get_indptr(B)
+        #columns_B = B.col.astype(np.int32)
+        columns_B = B.coords[1].astype(np.int32)
+        values_B = B.data.astype(np.double)
+
+        # output variables
+        pointerB_C_p = POINTER(c_int)()
+        pointerE_C_p = POINTER(c_int)()
+        columns_C_p = POINTER(c_int)()
+        values_C_p = POINTER(c_double)()
+        nnz = c_int(0)
+        handle_C = c_void_p() # used to free data
+
+        # calculation
+        libspmm.spmm(byref(c_int(M)), byref(c_int(N)), byref(c_int(K)), \
+                rowIndex_A.ctypes.data_as(c_void_p), columns_A.ctypes.data_as(c_void_p), values_A.ctypes.data_as(c_void_p), \
+                rowIndex_B.ctypes.data_as(c_void_p), columns_B.ctypes.data_as(c_void_p), values_B.ctypes.data_as(c_void_p), \
+                byref(pointerB_C_p), byref(pointerE_C_p), byref(columns_C_p), byref(values_C_p), byref(nnz), byref(handle_C))
+        
+        nnz = nnz.value
+
+        # convert to numpy object
+        buffer_tmp = np.core.multiarray.int_asbuffer(addressof(values_C_p.contents),\
+                np.dtype(np.double).itemsize * nnz)
+        values_C = np.frombuffer(buffer_tmp, np.double).copy()
+
+        buffer_tmp = np.core.multiarray.int_asbuffer(
+                    addressof(columns_C_p.contents), np.dtype(np.int32).itemsize * nnz)
+        columns_C = np.frombuffer(buffer_tmp, np.int32).copy()
+
+        buffer_tmp = np.core.multiarray.int_asbuffer(
+                    addressof(pointerB_C_p.contents), np.dtype(np.int32).itemsize * M)
+        pointerB_C = np.frombuffer(buffer_tmp, np.int32).copy()
+        pointerB_C = np.append(pointerB_C, np.array(nnz, dtype = np.int32)) # automatically do the copy
+
+        # free C
+        libspmm.free_handle(byref(handle_C))
+
+        # compute full row of C
+        rows_C = np.empty(nnz, dtype = columns_C.dtype)
+        _sparsetools.expandptr(M, pointerB_C, rows_C)
+       
+        # sort the cols and data
+        # ZHC TODO write a C function to do this
+        if nnz > 1000000:
+            idx_C = np.empty(nnz, dtype = np.int64)
+            pre_num = 0
+            for i in xrange(M):
+                idx_C[pointerB_C[i]:pointerB_C[i + 1]] = np.argsort(columns_C[pointerB_C[i]:pointerB_C[i + 1]]) + pre_num
+                pre_num += pointerB_C[i + 1] - pointerB_C[i]
+            columns_C = columns_C[idx_C]
+            values_C = values_C[idx_C]
+            
+            return COO(np.vstack((rows_C, columns_C)), data = values_C, shape = (M, N), sorted = True, has_duplicates = False)
+        else:
+            return COO(np.vstack((rows_C, columns_C)), data = values_C, shape = (M, N), sorted = False, has_duplicates = False)
+
+    _dot = mul_coo_coo
+else:
+    mul_coo_coo = dot
+
 
 #@profile
 def einsum(idx_str, *tensors, **kwargs):
@@ -351,7 +442,10 @@ def einsum(idx_str, *tensors, **kwargs):
     Bt = Bt.reshape((inner_shape,-1))
     # else:
     #     Bt = numpy.asarray(Bt.reshape(inner_shape,-1), order='C')
-    result = dot(At,Bt).reshape(shapeCt).transpose(new_orderCt)
+    #result = dot(At,Bt).reshape(shapeCt).transpose(new_orderCt)
+    result = mul_coo_coo(At,Bt).reshape(shapeCt).transpose(new_orderCt)
+    #time.sleep(0.1)
+    #result = (At.dot(Bt)).reshape(shapeCt).transpose(new_orderCt)
     return result
 
 #def svd(idx, a, D=0, preserve_uv=None):
