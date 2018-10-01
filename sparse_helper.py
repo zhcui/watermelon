@@ -11,7 +11,7 @@ COO = sparse.coo.COO
 from ctypes import *
 import scipy.sparse._sparsetools as _sparsetools
 try:
-    libspmm = cdll.LoadLibrary("./libspmm.so")
+    libspmm = cdll.LoadLibrary("./lib/libspmm.so")
     FOUND_LIB = True
 except (OSError):
     FOUND_LIB = False
