@@ -6,12 +6,12 @@ import gMPX as MPX
 """
 Sparse MPX functions
 """
-def zeros(dp, D = None, bc = None, dtype = np.float64):
+def zeros(dp, D = None, bc = None, dtype = np.float64, fix_D = False):
     def _from_np_zeros(shape, dtype):
         return sp.COO.from_numpy(np.zeros(shape, dtype))
-    return MPX.create(dp, D, bc, fn=_from_np_zeros)
+    return MPX.create(dp, D, bc, fn=_from_np_zeros, fix_D = fix_D)
 
-def rand(dp, D = None, bc = None, seed = None, density = 0.8, dtype=np.float64):
+def rand(dp, D = None, bc = None, seed = None, density = 0.8, dtype=np.float64, fix_D = False):
     # random float, upcast to dtype
     if seed is not None:
         np.random.seed(seed)
@@ -21,7 +21,7 @@ def rand(dp, D = None, bc = None, seed = None, density = 0.8, dtype=np.float64):
     if dtype != np.float64:
         raise NotImplementedError
     
-    return MPX.create(dp, D, bc, fn=fn, dtype=None)
+    return MPX.create(dp, D, bc, fn=fn, dtype=None, fix_D = fix_D)
 
 def _ndarray(lst):
     L = len(lst)

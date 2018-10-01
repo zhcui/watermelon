@@ -11,6 +11,15 @@ Generic MPX functions
 """
 
 def loop_mpxs(mpxs, func = None, collect = True, *args):
+    """
+    Function to loop over MPXs, and print / apply function on each MPX.
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    """
     if func is None:
         for mpx in mpxs:
             print mpx
@@ -21,7 +30,7 @@ def loop_mpxs(mpxs, func = None, collect = True, *args):
         for mpx in mpxs:
             func(mpx, *args)
 
-def create(dp, D=None, bc = None, fn=None, dtype=None):
+def create(dp, D=None, bc = None, fn=None, dtype=None, fix_D = False):
     # TODO: currently if D!=None and pbc, guarantees
     # all bond dims are D; but if obc, then
     # always follows obc_dim. Add option for guaranteed
@@ -49,11 +58,11 @@ def create(dp, D=None, bc = None, fn=None, dtype=None):
     except:
         _dp = dp
         
-    # calculate right bond dims of each tensor
-    dim_rs = obc_dim(_dp, D)
 
     # fill in MPX with arrays of the correct shape
     if bc == "obc":
+        # calculate right bond dims of each tensor
+        dim_rs = obc_dim(_dp, D, fix_D = fix_D)
         mpx[0]  = fn((1, _dp[0], dim_rs[0]), dtype=dtype)
         for i in range(1, L-1):
             mpx[i] = fn((dim_rs[i-1], _dp[i], dim_rs[i]), dtype=dtype)
@@ -76,7 +85,7 @@ def create(dp, D=None, bc = None, fn=None, dtype=None):
             
     return mpx
 
-def obc_dim(dp, D=None):
+def obc_dim(dp, D = None, fix_D = False):
     """
     Right bond dimensions for OBC MPX
 
@@ -90,12 +99,17 @@ def obc_dim(dp, D=None):
     -------
     dimMin : list of int, right bond dimensions
     """
+    if fix_D == True:
+        if D is None:
+            raise ValueError
+        dimMin = np.asarray([D] * len(dp))
+        return dimMin
     dimR = np.cumprod(dp)
     dimL = np.cumprod(dp[::-1])[::-1]
     
-    dimMin = np.minimum(dimR[:-1],dimL[1:])
+    dimMin = np.minimum(dimR[:-1], dimL[1:])
     if D is not None:
-        dimMin = np.minimum(dimMin,[D]*(len(dp)-1))
+        dimMin = np.minimum(dimMin, [D] * (len(dp) - 1))
 
     return dimMin
 

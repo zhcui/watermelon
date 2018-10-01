@@ -4,13 +4,13 @@ import gMPX
 """
 MPX with dense tensors
 """  
-def empty(dp, D = None, bc = None, dtype=np.float64):
-    return gMPX.create(dp, D, bc, fn=np.empty, dtype=dtype)
+def empty(dp, D = None, bc = None, dtype=np.float64, fix_D = False):
+    return gMPX.create(dp, D, bc, fn=np.empty, dtype=dtype, fix_D = fix_D)
 
-def zeros(dp, D = None, bc = None, dtype=np.float64):
-    return gMPX.create(dp, D, bc, fn=np.zeros, dtype=dtype)
+def zeros(dp, D = None, bc = None, dtype=np.float64, fix_D = False):
+    return gMPX.create(dp, D, bc, fn=np.zeros, dtype=dtype, fix_D = fix_D)
 
-def rand(dp, D = None, bc = None, seed = None, dtype=np.float64):
+def rand(dp, D = None, bc = None, seed = None, dtype=np.float64, fix_D = False):
     if dtype != np.float64:
         raise NotImplementedError
 
@@ -18,7 +18,7 @@ def rand(dp, D = None, bc = None, seed = None, dtype=np.float64):
         np.random.seed(seed)
     def fn(a, dtype):
         return np.array(np.random.random(a), dtype=dtype)
-    return gMPX.create(dp, D, bc, fn=fn, dtype=dtype)
+    return gMPX.create(dp, D, bc, fn=fn, dtype=dtype, fix_D = fix_D)
 
 def product_state(dp, occ, D=None, bc=None):
     """
