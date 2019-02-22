@@ -104,14 +104,35 @@ def obc_dim(dp, D = None, fix_D = False):
             raise ValueError
         dimMin = np.asarray([D] * len(dp))
         return dimMin
-    dimR = np.cumprod(dp)
-    dimL = np.cumprod(dp[::-1])[::-1]
-    
-    dimMin = np.minimum(dimR[:-1], dimL[1:])
-    if D is not None:
-        dimMin = np.minimum(dimMin, [D] * (len(dp) - 1))
 
-    return dimMin
+    print 'gMPX, dp = ', dp
+    print 'gMPX, len(dp) = ', len(dp)
+
+    N = len(dp)
+    dimR = D * np.ones(N)
+    dimL = D * np.ones(N)
+    
+    dR = 1
+    for i in xrange(N):
+        dR *= dp[i]
+        if dR < D:
+            dimR[i] = dR
+        else:
+            break
+    dL = 1
+    for i in xrange(N):
+        dL *= dp[N-i-1]
+        if dL < D:
+            dimL[N-i-1] = dL
+        else:
+            break
+    print 'dimR = ', dimR
+    print 'dimL = ', dimL
+    dimMin = np.minimum(dimR[:-1], dimL[1:])
+#   TODO: Take care of the case when D = None
+#    if D is not None:
+#        dimMin = np.minimum(dimMin, [D] * (len(dp) - 1))
+    return dimMin.astype(int)
 
 def element(mpx, occ, bc=None):
     """
